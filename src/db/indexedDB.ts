@@ -1,204 +1,233 @@
 import { Notebook, ContentItem, MediaRecord } from '../types';
 
-const DB_NAME = 'DigitalNotebookDB';
-const DB_VERSION = 2;
+const LS_KEY_NOTEBOOKS = 'digital_notebooks_v3';
+const LS_KEY_ITEMS = 'digital_items_v3';
+const LS_KEY_MEDIA = 'digital_media_v3';
 
-let dbInstance: IDBDatabase | null = null;
+// In-memory cache for ultra-fast, zero-latency synchronous access
+let notebooksCache: Notebook[] | null = null;
+let itemsCache: Map<string, ContentItem> | null = null;
+let mediaCache: Map<string, MediaRecord> | null = null;
 
-export function openDatabase(): Promise<IDBDatabase> {
-  if (dbInstance) {
-    return Promise.resolve(dbInstance);
+function blobToBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve((reader.result as string) || '');
+    reader.onerror = () => resolve('');
+    reader.readAsDataURL(blob);
+  });
+}
+
+function base64ToBlob(base64: string, fallbackType = 'image/jpeg'): Blob {
+  try {
+    if (!base64 || !base64.startsWith('data:')) {
+      return new Blob([], { type: fallbackType });
+    }
+    const parts = base64.split(';base64,');
+    const contentType = parts[0]?.replace('data:', '') || fallbackType;
+    const raw = atob(parts[1] || parts[0]);
+    const rawLength = raw.length;
+    const uInt8Array = new Uint8Array(rawLength);
+    for (let i = 0; i < rawLength; ++i) {
+      uInt8Array[i] = raw.charCodeAt(i);
+    }
+    return new Blob([uInt8Array], { type: contentType });
+  } catch {
+    return new Blob([], { type: fallbackType });
+  }
+}
+
+// Load data from localStorage into memory cache on first access (pure synchronous)
+function loadCacheFromLS(): void {
+  if (notebooksCache && itemsCache && mediaCache) return;
+
+  notebooksCache = [];
+  itemsCache = new Map();
+  mediaCache = new Map();
+
+  try {
+    const nbStr = localStorage.getItem(LS_KEY_NOTEBOOKS);
+    if (nbStr) {
+      notebooksCache = JSON.parse(nbStr);
+    }
+
+    const itemStr = localStorage.getItem(LS_KEY_ITEMS);
+    if (itemStr) {
+      const parsedItems: ContentItem[] = JSON.parse(itemStr);
+      parsedItems.forEach((it) => itemsCache!.set(it.id, it));
+    }
+
+    const mediaStr = localStorage.getItem(LS_KEY_MEDIA);
+    if (mediaStr) {
+      const parsedMedia: any[] = JSON.parse(mediaStr);
+      parsedMedia.forEach((m) => {
+        const record: MediaRecord = {
+          ...m,
+          blob: m.blob || undefined,
+          thumbnailBlob: m.thumbDataUrl ? base64ToBlob(m.thumbDataUrl, 'image/jpeg') : m.thumbnailBlob,
+        };
+        mediaCache!.set(m.id, record);
+      });
+    }
+  } catch (err) {
+    console.warn('Failed to load storage from localStorage:', err);
   }
 
-  return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, DB_VERSION);
-
-    request.onupgradeneeded = (event) => {
-      const db = (event.target as IDBOpenDBRequest).result;
-
-      // 1. Notebooks store
-      if (!db.objectStoreNames.contains('notebooks')) {
-        const notebookStore = db.createObjectStore('notebooks', { keyPath: 'id' });
-        notebookStore.createIndex('createdAt', 'createdAt', { unique: false });
-        notebookStore.createIndex('updatedAt', 'updatedAt', { unique: false });
-      }
-
-      // 2. Items store
-      if (!db.objectStoreNames.contains('items')) {
-        const itemStore = db.createObjectStore('items', { keyPath: 'id' });
-        itemStore.createIndex('notebookId', 'notebookId', { unique: false });
-        itemStore.createIndex('createdAt', 'createdAt', { unique: false });
-      }
-
-      // 3. Media store (stores binary blobs)
-      if (!db.objectStoreNames.contains('media')) {
-        const mediaStore = db.createObjectStore('media', { keyPath: 'id' });
-        mediaStore.createIndex('notebookId', 'notebookId', { unique: false });
-      }
+  // Create default notebook if empty
+  if (notebooksCache.length === 0) {
+    const defaultNb: Notebook = {
+      id: 'default-notebook-1',
+      title: '我的第一个随手记手账',
+      coverType: 'none',
+      coverColor: '#D9C8B4',
+      itemCount: 0,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
     };
+    notebooksCache.push(defaultNb);
+    persistNotebooksLS();
+  }
+}
 
-    request.onsuccess = (event) => {
-      dbInstance = (event.target as IDBOpenDBRequest).result;
-      dbInstance.onversionchange = () => {
-        dbInstance?.close();
-        dbInstance = null;
-      };
-      dbInstance.onclose = () => {
-        dbInstance = null;
-      };
-      resolve(dbInstance);
-    };
+// Persistence helpers
+function persistNotebooksLS(): void {
+  if (!notebooksCache) return;
+  try {
+    localStorage.setItem(LS_KEY_NOTEBOOKS, JSON.stringify(notebooksCache));
+  } catch {
+    // ignore
+  }
+}
 
-    request.onerror = () => {
-      reject(new Error(`打开本地数据库失败: ${request.error?.message || '未知错误'}`));
+function persistItemsLS(): void {
+  if (!itemsCache) return;
+  try {
+    const arr = Array.from(itemsCache.values());
+    localStorage.setItem(LS_KEY_ITEMS, JSON.stringify(arr));
+  } catch {
+    // ignore
+  }
+}
+
+async function persistMediaLS(): Promise<void> {
+  if (!mediaCache) return;
+  const arr = Array.from(mediaCache.values());
+
+  const serializedPromises = arr.map(async (m) => {
+    let thumbDataUrl: string | undefined;
+
+    // Only encode base64 for small thumbnail images (< 150KB)
+    if (m.thumbnailBlob instanceof Blob && m.thumbnailBlob.size < 150000) {
+      try {
+        thumbDataUrl = await blobToBase64(m.thumbnailBlob);
+      } catch {
+        thumbDataUrl = undefined;
+      }
+    }
+
+    return {
+      id: m.id,
+      notebookId: m.notebookId,
+      type: m.type,
+      mimeType: m.mimeType,
+      width: m.width,
+      height: m.height,
+      duration: m.duration,
+      fileName: m.fileName,
+      sourceUrl: m.sourceUrl,
+      fileSize: m.fileSize,
+      createdAt: m.createdAt,
+      thumbDataUrl,
     };
   });
+
+  try {
+    const serialized = await Promise.all(serializedPromises);
+    localStorage.setItem(LS_KEY_MEDIA, JSON.stringify(serialized));
+  } catch {
+    // ignore
+  }
+}
+
+// Backward compatibility stub (pure synchronous resolve)
+export async function openDatabase(): Promise<any> {
+  loadCacheFromLS();
+  return null;
 }
 
 // ----------------- Notebooks -----------------
 
 export async function getAllNotebooks(): Promise<Notebook[]> {
-  const db = await openDatabase();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(['notebooks', 'items'], 'readonly');
-    const notebookStore = tx.objectStore('notebooks');
-    const itemStore = tx.objectStore('items');
-    const index = itemStore.index('notebookId');
+  loadCacheFromLS();
+  const notebooks = [...notebooksCache!];
+  notebooks.sort((a, b) => b.updatedAt - a.updatedAt);
 
-    const notebooksRequest = notebookStore.getAll();
-
-    notebooksRequest.onsuccess = async () => {
-      const notebooks: Notebook[] = notebooksRequest.result || [];
-      // Sort by updatedAt descending
-      notebooks.sort((a, b) => b.updatedAt - a.updatedAt);
-
-      // Populate item counts
-      const countsPromises = notebooks.map((nb) => {
-        return new Promise<number>((resCount) => {
-          const countReq = index.count(IDBKeyRange.only(nb.id));
-          countReq.onsuccess = () => resCount(countReq.result);
-          countReq.onerror = () => resCount(0);
-        });
-      });
-
-      const counts = await Promise.all(countsPromises);
-      notebooks.forEach((nb, i) => {
-        nb.itemCount = counts[i];
-      });
-
-      resolve(notebooks);
-    };
-
-    notebooksRequest.onerror = () => {
-      reject(new Error('读取手账列表失败'));
-    };
+  // Recalculate item counts
+  const items = Array.from(itemsCache!.values());
+  notebooks.forEach((nb) => {
+    nb.itemCount = items.filter((i) => i.notebookId === nb.id).length;
   });
+
+  return notebooks;
 }
 
 export async function getNotebook(id: string): Promise<Notebook | null> {
-  const db = await openDatabase();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction('notebooks', 'readonly');
-    const store = tx.objectStore('notebooks');
-    const request = store.get(id);
-
-    request.onsuccess = () => resolve(request.result || null);
-    request.onerror = () => reject(new Error('读取手账详情失败'));
-  });
+  loadCacheFromLS();
+  const nb = notebooksCache!.find((n) => n.id === id);
+  return nb ? { ...nb } : null;
 }
 
 export async function saveNotebook(notebook: Notebook): Promise<void> {
-  const db = await openDatabase();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction('notebooks', 'readwrite');
-    const store = tx.objectStore('notebooks');
-    const request = store.put(notebook);
-
-    request.onsuccess = () => resolve();
-    request.onerror = () => reject(new Error('保存手账失败'));
-  });
+  loadCacheFromLS();
+  const idx = notebooksCache!.findIndex((n) => n.id === notebook.id);
+  if (idx >= 0) {
+    notebooksCache![idx] = { ...notebook, updatedAt: Date.now() };
+  } else {
+    notebooksCache!.push({ ...notebook });
+  }
+  persistNotebooksLS();
 }
 
 export async function deleteNotebook(id: string): Promise<void> {
-  const db = await openDatabase();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(['notebooks', 'items', 'media'], 'readwrite');
-    const notebookStore = tx.objectStore('notebooks');
-    const itemStore = tx.objectStore('items');
-    const mediaStore = tx.objectStore('media');
+  loadCacheFromLS();
+  notebooksCache = notebooksCache!.filter((n) => n.id !== id);
+  persistNotebooksLS();
 
-    // 1. Delete notebook
-    notebookStore.delete(id);
-
-    // 2. Find and delete all items belonging to this notebook
-    const itemsIndex = itemStore.index('notebookId');
-    const itemsReq = itemsIndex.getAll(IDBKeyRange.only(id));
-
-    itemsReq.onsuccess = () => {
-      const items: ContentItem[] = itemsReq.result || [];
-      items.forEach((item) => {
-        itemStore.delete(item.id);
-        if (item.mediaId) {
-          mediaStore.delete(item.mediaId);
-        }
-      });
-
-      // 3. Delete any orphaned media with notebookId
-      const mediaIndex = mediaStore.index('notebookId');
-      const mediaReq = mediaIndex.getAllKeys(IDBKeyRange.only(id));
-      mediaReq.onsuccess = () => {
-        const keys = mediaReq.result || [];
-        keys.forEach((k) => mediaStore.delete(k));
-      };
-    };
-
-    tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(new Error('删除手账失败'));
-  });
+  // Remove items in this notebook
+  const itemEntries = Array.from(itemsCache!.entries());
+  for (const [itemId, item] of itemEntries) {
+    if (item.notebookId === id) {
+      itemsCache!.delete(itemId);
+      if (item.mediaId) {
+        mediaCache!.delete(item.mediaId);
+      }
+    }
+  }
+  persistItemsLS();
+  persistMediaLS();
 }
 
 // ----------------- Items -----------------
 
 export async function getItemsByNotebook(notebookId: string): Promise<ContentItem[]> {
-  const db = await openDatabase();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction('items', 'readonly');
-    const store = tx.objectStore('items');
-    const index = store.index('notebookId');
-    const request = index.getAll(IDBKeyRange.only(notebookId));
-
-    request.onsuccess = () => {
-      const items: ContentItem[] = request.result || [];
-      // Sort by zIndex, then createdAt
-      items.sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0) || a.createdAt - b.createdAt);
-      resolve(items);
-    };
-    request.onerror = () => reject(new Error('读取手账内容失败'));
-  });
+  loadCacheFromLS();
+  const all = Array.from(itemsCache!.values()).filter((i) => i.notebookId === notebookId);
+  all.sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0) || a.createdAt - b.createdAt);
+  return all;
 }
 
 export async function saveItem(item: ContentItem): Promise<void> {
-  const db = await openDatabase();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(['items', 'notebooks'], 'readwrite');
-    const itemStore = tx.objectStore('items');
-    const notebookStore = tx.objectStore('notebooks');
+  loadCacheFromLS();
+  itemsCache!.set(item.id, { ...item, updatedAt: Date.now() });
+  persistItemsLS();
 
-    itemStore.put(item);
-
-    // Update notebook updatedAt timestamp
-    const nbReq = notebookStore.get(item.notebookId);
-    nbReq.onsuccess = () => {
-      if (nbReq.result) {
-        const nb = nbReq.result as Notebook;
-        nb.updatedAt = Date.now();
-        notebookStore.put(nb);
-      }
-    };
-
-    tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(new Error('保存内容项失败'));
-  });
+  // Update notebook updatedAt
+  const nb = notebooksCache!.find((n) => n.id === item.notebookId);
+  if (nb) {
+    nb.updatedAt = Date.now();
+    nb.itemCount = Array.from(itemsCache!.values()).filter((i) => i.notebookId === item.notebookId).length;
+    persistNotebooksLS();
+  }
 }
 
 export async function updateItemPosition(
@@ -207,26 +236,16 @@ export async function updateItemPosition(
   y: number,
   zIndex: number
 ): Promise<void> {
-  const db = await openDatabase();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction('items', 'readwrite');
-    const store = tx.objectStore('items');
-    const getReq = store.get(id);
-
-    getReq.onsuccess = () => {
-      if (getReq.result) {
-        const item = getReq.result as ContentItem;
-        item.x = Math.round(x);
-        item.y = Math.round(y);
-        item.zIndex = zIndex;
-        item.updatedAt = Date.now();
-        store.put(item);
-      }
-    };
-
-    tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(new Error('更新内容位置失败'));
-  });
+  loadCacheFromLS();
+  const item = itemsCache!.get(id);
+  if (item) {
+    item.x = Math.round(x);
+    item.y = Math.round(y);
+    item.zIndex = zIndex;
+    item.updatedAt = Date.now();
+    itemsCache!.set(id, item);
+    persistItemsLS();
+  }
 }
 
 export async function updateItemTransform(
@@ -240,186 +259,81 @@ export async function updateItemTransform(
     zIndex?: number;
   }
 ): Promise<void> {
-  const db = await openDatabase();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction('items', 'readwrite');
-    const store = tx.objectStore('items');
-    const getReq = store.get(id);
-
-    getReq.onsuccess = () => {
-      if (getReq.result) {
-        const item = getReq.result as ContentItem;
-        if (transform.x !== undefined) item.x = Math.round(transform.x);
-        if (transform.y !== undefined) item.y = Math.round(transform.y);
-        if (transform.width !== undefined) item.width = Math.round(transform.width);
-        if (transform.height !== undefined) item.height = Math.round(transform.height);
-        if (transform.rotation !== undefined) item.rotation = Math.round(transform.rotation * 10) / 10;
-        if (transform.zIndex !== undefined) item.zIndex = transform.zIndex;
-        item.updatedAt = Date.now();
-        store.put(item);
-      }
-    };
-
-    tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(new Error('更新内容变形失败'));
-  });
+  loadCacheFromLS();
+  const item = itemsCache!.get(id);
+  if (item) {
+    if (transform.x !== undefined) item.x = Math.round(transform.x);
+    if (transform.y !== undefined) item.y = Math.round(transform.y);
+    if (transform.width !== undefined) item.width = Math.round(transform.width);
+    if (transform.height !== undefined) item.height = Math.round(transform.height);
+    if (transform.rotation !== undefined) item.rotation = Math.round(transform.rotation * 10) / 10;
+    if (transform.zIndex !== undefined) item.zIndex = transform.zIndex;
+    item.updatedAt = Date.now();
+    itemsCache!.set(id, item);
+    persistItemsLS();
+  }
 }
 
 export async function deleteItem(id: string, mediaId?: string): Promise<void> {
-  const db = await openDatabase();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(['items', 'media'], 'readwrite');
-    const itemStore = tx.objectStore('items');
-    const mediaStore = tx.objectStore('media');
+  loadCacheFromLS();
+  const item = itemsCache!.get(id);
+  itemsCache!.delete(id);
+  if (mediaId) {
+    mediaCache!.delete(mediaId);
+  }
+  persistItemsLS();
+  persistMediaLS();
 
-    itemStore.delete(id);
-    if (mediaId) {
-      mediaStore.delete(mediaId);
+  if (item) {
+    const nb = notebooksCache!.find((n) => n.id === item.notebookId);
+    if (nb) {
+      nb.updatedAt = Date.now();
+      nb.itemCount = Array.from(itemsCache!.values()).filter((i) => i.notebookId === item.notebookId).length;
+      persistNotebooksLS();
     }
-
-    tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(new Error('删除内容失败'));
-  });
+  }
 }
 
 // ----------------- Media -----------------
 
 export async function saveMedia(media: MediaRecord): Promise<void> {
-  const db = await openDatabase();
-  return new Promise((resolve, reject) => {
-    try {
-      const tx = db.transaction('media', 'readwrite');
-      const store = tx.objectStore('media');
-
-      // Preserve thumbnail blob with its correct MIME type
-      const cleanThumb = media.thumbnailBlob instanceof Blob
-        ? media.thumbnailBlob.slice(0, media.thumbnailBlob.size, media.thumbnailBlob.type || 'image/jpeg')
-        : media.thumbnailBlob;
-
-      // Preserve media blob with its correct MIME type
-      const cleanBlob = media.blob instanceof Blob
-        ? media.blob.slice(0, media.blob.size, media.blob.type || media.mimeType || 'application/octet-stream')
-        : media.blob;
-
-      const cleanRecord: MediaRecord = {
-        id: media.id,
-        notebookId: media.notebookId,
-        type: media.type,
-        mimeType: media.mimeType,
-        blob: cleanBlob,
-        thumbnailBlob: cleanThumb,
-        width: media.width,
-        height: media.height,
-        duration: media.duration,
-        fileName: media.fileName,
-        sourceUrl: media.sourceUrl,
-        fileHandle: media.fileHandle,
-        fileSize: media.fileSize,
-        createdAt: media.createdAt || Date.now(),
-      };
-
-      const request = store.put(cleanRecord);
-
-      request.onsuccess = () => resolve();
-
-      const handleFallback = () => {
-        // If quota exceeded or failed while saving full blob, retry saving thumbnail only
-        if (cleanRecord.blob && cleanRecord.thumbnailBlob) {
-          try {
-            const fallbackTx = db.transaction('media', 'readwrite');
-            const fallbackStore = fallbackTx.objectStore('media');
-            const fallbackRecord = { ...cleanRecord };
-            delete fallbackRecord.blob;
-            const retryReq = fallbackStore.put(fallbackRecord);
-            retryReq.onsuccess = () => resolve();
-            retryReq.onerror = () => reject(new Error('保存缩略图也失败，请清理存储'));
-          } catch {
-            reject(new Error('保存媒体数据失败'));
-          }
-        } else {
-          reject(new Error(`保存媒体数据失败: ${request.error?.message || '存储问题'}`));
-        }
-      };
-
-      request.onerror = handleFallback;
-      tx.onerror = handleFallback;
-    } catch (err) {
-      console.error('IndexedDB saveMedia exception:', err);
-      reject(err instanceof Error ? err : new Error('保存媒体数据异常'));
-    }
-  });
+  loadCacheFromLS();
+  mediaCache!.set(media.id, { ...media });
+  persistMediaLS(); // Non-blocking fire and forget
 }
 
 export async function updateMediaSource(
   id: string,
   update: { fileHandle?: any; sourceUrl?: string; fileName?: string }
 ): Promise<void> {
-  const db = await openDatabase();
-  return new Promise((resolve, reject) => {
-    try {
-      const tx = db.transaction('media', 'readwrite');
-      const store = tx.objectStore('media');
-      const getReq = store.get(id);
-
-      getReq.onsuccess = () => {
-        if (getReq.result) {
-          const media = getReq.result as MediaRecord;
-          if (update.fileHandle !== undefined) media.fileHandle = update.fileHandle;
-          if (update.sourceUrl !== undefined) media.sourceUrl = update.sourceUrl;
-          if (update.fileName !== undefined) media.fileName = update.fileName;
-          store.put(media);
-        }
-      };
-
-      tx.oncomplete = () => resolve();
-      tx.onerror = () => reject(new Error('更新媒体原地址信息失败'));
-    } catch (err) {
-      reject(err instanceof Error ? err : new Error('更新媒体原地址异常'));
-    }
-  });
+  loadCacheFromLS();
+  const m = mediaCache!.get(id);
+  if (m) {
+    if (update.fileHandle !== undefined) m.fileHandle = update.fileHandle;
+    if (update.sourceUrl !== undefined) m.sourceUrl = update.sourceUrl;
+    if (update.fileName !== undefined) m.fileName = update.fileName;
+    mediaCache!.set(id, m);
+    persistMediaLS();
+  }
 }
 
 export async function getMedia(id: string): Promise<MediaRecord | null> {
-  const db = await openDatabase();
-  return new Promise((resolve, reject) => {
-    try {
-      const tx = db.transaction('media', 'readonly');
-      const store = tx.objectStore('media');
-      const request = store.get(id);
-
-      request.onsuccess = () => resolve(request.result || null);
-      request.onerror = () => reject(new Error('读取媒体数据失败'));
-    } catch (err) {
-      console.error('IndexedDB getMedia exception:', err);
-      resolve(null);
-    }
-  });
+  loadCacheFromLS();
+  const m = mediaCache!.get(id);
+  return m ? { ...m } : null;
 }
 
 export async function deleteMedia(id: string): Promise<void> {
-  const db = await openDatabase();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction('media', 'readwrite');
-    const store = tx.objectStore('media');
-    const request = store.delete(id);
-
-    request.onsuccess = () => resolve();
-    request.onerror = () => reject(new Error('删除媒体数据失败'));
-  });
+  loadCacheFromLS();
+  mediaCache!.delete(id);
+  persistMediaLS();
 }
 
 // ----------------- Stats & Maintenance -----------------
 
 export async function getAllItems(): Promise<ContentItem[]> {
-  const db = await openDatabase();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction('items', 'readonly');
-    const store = tx.objectStore('items');
-    const request = store.getAll();
-
-    request.onsuccess = () => resolve(request.result || []);
-    request.onerror = () => reject(new Error('读取所有内容项失败'));
-  });
+  loadCacheFromLS();
+  return Array.from(itemsCache!.values());
 }
 
 export async function getDatabaseStats(): Promise<{
@@ -427,53 +341,23 @@ export async function getDatabaseStats(): Promise<{
   itemCount: number;
   mediaCount: number;
 }> {
-  const db = await openDatabase();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(['notebooks', 'items', 'media'], 'readonly');
-    const nbStore = tx.objectStore('notebooks');
-    const itemStore = tx.objectStore('items');
-    const mediaStore = tx.objectStore('media');
-
-    let nbCount = 0;
-    let itemCount = 0;
-    let mediaCount = 0;
-
-    const nbReq = nbStore.count();
-    nbReq.onsuccess = () => {
-      nbCount = nbReq.result;
-    };
-
-    const itemReq = itemStore.count();
-    itemReq.onsuccess = () => {
-      itemCount = itemReq.result;
-    };
-
-    const mediaReq = mediaStore.count();
-    mediaReq.onsuccess = () => {
-      mediaCount = mediaReq.result;
-    };
-
-    tx.oncomplete = () => {
-      resolve({
-        notebookCount: nbCount,
-        itemCount,
-        mediaCount,
-      });
-    };
-
-    tx.onerror = () => reject(new Error('获取存储统计数据失败'));
-  });
+  loadCacheFromLS();
+  return {
+    notebookCount: notebooksCache!.length,
+    itemCount: itemsCache!.size,
+    mediaCount: mediaCache!.size,
+  };
 }
 
 export async function clearAllDatabaseData(): Promise<void> {
-  const db = await openDatabase();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(['notebooks', 'items', 'media'], 'readwrite');
-    tx.objectStore('notebooks').clear();
-    tx.objectStore('items').clear();
-    tx.objectStore('media').clear();
-
-    tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(new Error('清空手账数据失败'));
-  });
+  notebooksCache = [];
+  itemsCache = new Map();
+  mediaCache = new Map();
+  try {
+    localStorage.removeItem(LS_KEY_NOTEBOOKS);
+    localStorage.removeItem(LS_KEY_ITEMS);
+    localStorage.removeItem(LS_KEY_MEDIA);
+  } catch {
+    // ignore
+  }
 }

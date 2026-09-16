@@ -96,14 +96,6 @@ export const WebpageItem: React.FC<WebpageItemProps> = ({
             </button>
             <button
               type="button"
-              onClick={() => onResetTransform(item)}
-              className="p-1 rounded-md text-[#7D7062] hover:text-[#2D2721] hover:bg-black/5 transition-colors"
-              title="恢复默认大小与角度"
-            >
-              <RotateCcw className="w-3.5 h-3.5" />
-            </button>
-            <button
-              type="button"
               onClick={() => onDelete(item.id)}
               className="p-1 rounded-md text-[#A85B5B] hover:text-[#C5221F] hover:bg-black/5 transition-colors"
               title="删除此网页书签"

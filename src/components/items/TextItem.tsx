@@ -21,6 +21,7 @@ interface TextItemProps {
   onBringToFront?: (id: string) => void;
   onUpdateText: (id: string, text: string) => void;
   onDelete: (id: string) => void;
+  onToggleHalfWidth?: (item: ContentItem) => void;
 }
 
 export const TextItem: React.FC<TextItemProps> = ({
@@ -33,6 +34,7 @@ export const TextItem: React.FC<TextItemProps> = ({
   onBringToFront,
   onUpdateText,
   onDelete,
+  onToggleHalfWidth,
 }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [draftText, setDraftText] = useState(item.text || '');
@@ -69,9 +71,11 @@ export const TextItem: React.FC<TextItemProps> = ({
     kraft: 'bg-[#EDE1D1] border-[#D6C5B0] text-[#3E3223]',
   }[item.noteColor || 'yellow'];
 
-  // Clamp width according to canvas
-  const effectiveWidth = Math.min(item.width || 260, canvasWidth - 32);
+  // Clamp width according to canvas (supports min-width down to 44px = two Chinese characters)
+  const effectiveWidth = Math.min(Math.max(item.width || 260, 44), canvasWidth - 32);
   const effectiveHeight = item.height || 160;
+  const isNarrow = effectiveWidth < 90;
+  const isUltraNarrow = effectiveWidth < 60;
 
   return (
     <div
@@ -87,47 +91,39 @@ export const TextItem: React.FC<TextItemProps> = ({
       className="absolute top-0 left-0 transition-shadow duration-150 group touch-auto select-none"
     >
       <div
-        className={`relative rounded-xl border p-3 pt-2 shadow-[var(--scrap-shadow)] hover:shadow-[var(--scrap-hover)] transition-all flex flex-col ${colorStyles}`}
+        className={`relative rounded-xl border p-2 pt-1.5 shadow-[var(--scrap-shadow)] hover:shadow-[var(--scrap-hover)] transition-all flex flex-col ${colorStyles}`}
         style={{
           minHeight: `${effectiveHeight}px`,
         }}
       >
-        {/* Washi Tape / Grab Handle at the top */}
-        <div className="flex items-center justify-between pb-1 mb-1 border-b border-black/5">
+        {/* Washi Tape / Grab Handle at the top - 2-line layout when narrow */}
+        <div className={`pb-1 mb-1 border-b border-black/5 ${isNarrow ? 'flex flex-col items-center gap-0.5' : 'flex items-center justify-between gap-0.5'}`}>
           <div
             onPointerDown={(e) => onDragStart(e, item)}
-            className="flex-1 flex items-center justify-center py-1 cursor-grab active:cursor-grabbing touch-none select-none text-[#94887C] hover:text-[#4A3F35]"
+            className="w-full flex items-center justify-center py-0.5 cursor-grab active:cursor-grabbing touch-none select-none text-[#94887C] hover:text-[#4A3F35]"
             title="按住拖拽移动便签位置"
           >
             {/* Vintage washi tape indicator */}
-            <div className="h-2.5 w-16 rounded-xs bg-[#E5D7C3]/90 border border-black/10 flex items-center justify-center">
+            <div className={`h-2 rounded-xs bg-[#E5D7C3]/90 border border-black/10 flex items-center justify-center ${isUltraNarrow ? 'w-5' : isNarrow ? 'w-8' : 'w-14'}`}>
               <GripHorizontal className="w-3 h-3 opacity-60" />
             </div>
           </div>
 
-          <div className="flex items-center gap-1 opacity-80 group-hover:opacity-100 transition-opacity">
+          <div className={`flex items-center justify-center gap-0.5 opacity-80 group-hover:opacity-100 transition-opacity ${isNarrow ? 'w-full' : ''}`}>
             {!isEditing ? (
               <>
                 <button
                   type="button"
                   onClick={() => setIsEditing(true)}
-                  className="p-1 rounded-md text-[#7D7062] hover:text-[#2D2721] hover:bg-black/5 transition-colors"
+                  className="p-0.5 rounded-md text-[#7D7062] hover:text-[#2D2721] hover:bg-black/5 transition-colors"
                   title="编辑文字"
                 >
                   <Edit3 className="w-3.5 h-3.5" />
                 </button>
                 <button
                   type="button"
-                  onClick={() => onResetTransform(item)}
-                  className="p-1 rounded-md text-[#7D7062] hover:text-[#2D2721] hover:bg-black/5 transition-colors"
-                  title="恢复默认大小与角度"
-                >
-                  <RotateCcw className="w-3.5 h-3.5" />
-                </button>
-                <button
-                  type="button"
                   onClick={() => onDelete(item.id)}
-                  className="p-1 rounded-md text-[#A85B5B] hover:text-[#C5221F] hover:bg-black/5 transition-colors"
+                  className="p-0.5 rounded-md text-[#A85B5B] hover:text-[#C5221F] hover:bg-black/5 transition-colors"
                   title="删除此便签"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
@@ -138,7 +134,7 @@ export const TextItem: React.FC<TextItemProps> = ({
                 <button
                   type="button"
                   onClick={handleSave}
-                  className="p-1 rounded-md text-[#198754] hover:bg-black/5 transition-colors"
+                  className="p-0.5 rounded-md text-[#198754] hover:bg-black/5 transition-colors"
                   title="完成编辑"
                 >
                   <Check className="w-3.5 h-3.5" />
@@ -146,7 +142,7 @@ export const TextItem: React.FC<TextItemProps> = ({
                 <button
                   type="button"
                   onClick={handleCancel}
-                  className="p-1 rounded-md text-[#6C757D] hover:bg-black/5 transition-colors"
+                  className="p-0.5 rounded-md text-[#6C757D] hover:bg-black/5 transition-colors"
                   title="取消"
                 >
                   <X className="w-3.5 h-3.5" />
@@ -183,7 +179,7 @@ export const TextItem: React.FC<TextItemProps> = ({
         ) : (
           <div
             onDoubleClick={() => setIsEditing(true)}
-            className="text-sm leading-relaxed whitespace-pre-wrap break-words py-1 select-text font-normal cursor-text flex-1 flex flex-col justify-start"
+            className="text-sm leading-relaxed whitespace-pre-wrap break-words break-all py-1 select-text font-normal cursor-text flex-1 flex flex-col justify-start"
           >
             {item.text || '（空白便签，双击输入文字）'}
           </div>

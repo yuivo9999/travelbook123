@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import { ContentItem } from '../../types';
 import { getMedia } from '../../db/indexedDB';
-import { formatDuration, createSafeBlobUrl } from '../../utils/media';
+import { formatDuration, createSafeBlobUrl, getSessionFile } from '../../utils/media';
 
 // Memory cache for video thumbnails & streams
 const videoMediaCache = new Map<string, { thumbUrl: string | null; videoBlobUrl: string | null; duration?: number }>();
@@ -28,7 +28,7 @@ interface VideoItemProps {
   onDelete: (id: string, mediaId?: string) => void;
 }
 
-export const VideoItem: React.FC<VideoItemProps> = ({
+const VideoItemComponent: React.FC<VideoItemProps> = ({
   item,
   canvasWidth,
   onDragStart,
@@ -64,6 +64,15 @@ export const VideoItem: React.FC<VideoItemProps> = ({
         if (cached.duration) setDuration(cached.duration);
         setLoading(false);
         return;
+      }
+
+      // Check session memory registry for zero-delay stream preview
+      const sessionFile = getSessionFile(item.mediaId);
+      if (sessionFile) {
+        const streamUrl = createSafeBlobUrl(sessionFile, sessionFile.type || 'video/mp4');
+        if (streamUrl && isMounted) {
+          setVideoBlobUrl(streamUrl);
+        }
       }
 
       try {
@@ -153,14 +162,6 @@ export const VideoItem: React.FC<VideoItemProps> = ({
               title="播放视频"
             >
               <Play className="w-3.5 h-3.5 fill-current" />
-            </button>
-            <button
-              type="button"
-              onClick={() => onResetTransform(item)}
-              className="p-1 rounded-md text-[#7D7062] hover:text-[#2D2721] hover:bg-black/5 transition-colors"
-              title="恢复默认大小与角度"
-            >
-              <RotateCcw className="w-3.5 h-3.5" />
             </button>
             <button
               type="button"
@@ -268,3 +269,5 @@ export const VideoItem: React.FC<VideoItemProps> = ({
     </div>
   );
 };
+
+export const VideoItem = React.memo(VideoItemComponent);

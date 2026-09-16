@@ -350,7 +350,17 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
       };
 
       await saveItem(newItem);
-      setItems((prev) => [...prev, newItem]);
+      const updatedItems = [...items, newItem];
+      setItems(updatedItems);
+
+      const updatedNotebook = {
+        ...notebook,
+        itemCount: updatedItems.length,
+        updatedAt: Date.now(),
+      };
+      await saveNotebook(updatedNotebook);
+      onUpdateNotebook(updatedNotebook);
+
       showToast('已贴上手账便签', 'success');
 
       // Scroll smoothly to newly added item if below screen
@@ -416,14 +426,17 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
       };
 
       await saveItem(newItem);
-      setItems((prev) => [...prev, newItem]);
+      const updatedItems = [...items, newItem];
+      setItems(updatedItems);
 
-      // If notebook doesn't have a cover yet, set this image as cover
-      if (!notebook.coverImageId) {
-        const updated = { ...notebook, coverImageId: mediaId, updatedAt: Date.now() };
-        await saveNotebook(updated);
-        onUpdateNotebook(updated);
-      }
+      const updatedNotebook = {
+        ...notebook,
+        itemCount: updatedItems.length,
+        coverImageId: notebook.coverImageId || mediaId,
+        updatedAt: Date.now(),
+      };
+      await saveNotebook(updatedNotebook);
+      onUpdateNotebook(updatedNotebook);
 
       showToast('已成功贴上照片 (轻量化存储)', 'success');
 
@@ -490,7 +503,17 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
       };
 
       await saveItem(newItem);
-      setItems((prev) => [...prev, newItem]);
+      const updatedItems = [...items, newItem];
+      setItems(updatedItems);
+
+      const updatedNotebook = {
+        ...notebook,
+        itemCount: updatedItems.length,
+        updatedAt: Date.now(),
+      };
+      await saveNotebook(updatedNotebook);
+      onUpdateNotebook(updatedNotebook);
+
       showToast('已成功贴上视频剪辑 (轻量化存储)', 'success');
 
       if (y > window.scrollY + window.innerHeight - 200) {
@@ -546,7 +569,17 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
       };
 
       await saveItem(newItem);
-      setItems((prev) => [...prev, newItem]);
+      const updatedItems = [...items, newItem];
+      setItems(updatedItems);
+
+      const updatedNotebookUrl = {
+        ...notebook,
+        itemCount: updatedItems.length,
+        updatedAt: Date.now(),
+      };
+      await saveNotebook(updatedNotebookUrl);
+      onUpdateNotebook(updatedNotebookUrl);
+
       showToast(`已成功贴上${type === 'image' ? '照片' : '视频'}原链接`, 'success');
 
       if (y > window.scrollY + window.innerHeight - 200) {
@@ -590,7 +623,17 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
       };
 
       await saveItem(newItem);
-      setItems((prev) => [...prev, newItem]);
+      const updatedItems = [...items, newItem];
+      setItems(updatedItems);
+
+      const updatedNotebookWeb = {
+        ...notebook,
+        itemCount: updatedItems.length,
+        updatedAt: Date.now(),
+      };
+      await saveNotebook(updatedNotebookWeb);
+      onUpdateNotebook(updatedNotebookWeb);
+
       showToast('已成功贴上网页卡片 (点击即可在窗口中浏览与播放视频)', 'success');
 
       if (y > window.scrollY + window.innerHeight - 200) {
@@ -614,6 +657,11 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
       };
       await saveItem(updated);
       setItems((prev) => prev.map((i) => (i.id === id ? updated : i)));
+
+      const updatedNotebook = { ...notebook, updatedAt: Date.now() };
+      await saveNotebook(updatedNotebook);
+      onUpdateNotebook(updatedNotebook);
+
       showToast('便签内容已保存', 'success');
     } catch (err) {
       console.error(err);
@@ -629,7 +677,17 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
 
     try {
       await deleteItem(id, mediaId);
-      setItems((prev) => prev.filter((i) => i.id !== id));
+      const remainingItems = items.filter((i) => i.id !== id);
+      setItems(remainingItems);
+
+      const updatedNotebook = {
+        ...notebook,
+        itemCount: remainingItems.length,
+        updatedAt: Date.now(),
+      };
+      await saveNotebook(updatedNotebook);
+      onUpdateNotebook(updatedNotebook);
+
       showToast('已移除该手账资料', 'success');
     } catch (err) {
       console.error(err);
@@ -810,6 +868,19 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
     }
   };
 
+  // Toggle half width (80px) for text note items
+  const handleToggleHalfWidth = async (item: ContentItem) => {
+    const currentW = item.width || 260;
+    const targetW = currentW <= 120 ? 260 : 80;
+    const updatedItems = items.map((it) => (it.id === item.id ? { ...it, width: targetW } : it));
+    setItems(updatedItems);
+    await updateItemTransform(item.id, { width: targetW });
+    const updatedNotebook = { ...notebook, updatedAt: Date.now() };
+    await saveNotebook(updatedNotebook);
+    onUpdateNotebook(updatedNotebook);
+    showToast(targetW === 80 ? '已切为 1/2 窄幅便签 (80px)' : '已恢复标准宽度 (260px)', 'info');
+  };
+
   const handlePointerMove = (e: React.PointerEvent) => {
     // 1. Check rotating
     if (rotatingRef.current) {
@@ -862,8 +933,10 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
       const localDw = dx * Math.cos(rotationRad) + dy * Math.sin(rotationRad);
       const localDh = -dx * Math.sin(rotationRad) + dy * Math.cos(rotationRad);
 
-      let newW = Math.max(160, Math.min(canvasWidth - 32, initialWidth + localDw));
-      let newH = Math.max(90, Math.min(1200, initialHeight + localDh));
+      const targetItem = items.find((i) => i.id === itemId);
+      const minItemWidth = targetItem?.type === 'text' ? 44 : 120;
+      let newW = Math.max(minItemWidth, Math.min(canvasWidth - 32, initialWidth + localDw));
+      let newH = Math.max(60, Math.min(1200, initialHeight + localDh));
 
       if (settings.snapToGrid) {
         newW = Math.round(newW / 12) * 12;
@@ -935,6 +1008,7 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
             rotation: current.rotation,
             zIndex: current.zIndex,
           });
+          onUpdateNotebook({ ...notebook, updatedAt: Date.now() });
         }
       }
       return;
@@ -957,6 +1031,7 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
             width: current.width,
             height: current.height,
           });
+          onUpdateNotebook({ ...notebook, updatedAt: Date.now() });
         }
       }
       return;
@@ -979,6 +1054,7 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
         if (current) {
           // Auto-save position to IndexedDB
           await updateItemPosition(current.id, current.x, current.y, current.zIndex);
+          onUpdateNotebook({ ...notebook, updatedAt: Date.now() });
         }
       }
     }
@@ -1421,7 +1497,12 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
         isOpen={isCoverModalOpen}
         notebook={notebook}
         onClose={() => setIsCoverModalOpen(false)}
-        onSave={async (updated) => {
+        onSave={async (coverData) => {
+          const updated: Notebook = {
+            ...notebook,
+            ...coverData,
+            updatedAt: Date.now(),
+          };
           onUpdateNotebook(updated);
           try {
             await saveNotebook(updated);

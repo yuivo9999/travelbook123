@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 import { ContentItem } from '../../types';
 import { getMedia } from '../../db/indexedDB';
-import { createSafeBlobUrl } from '../../utils/media';
+import { createSafeBlobUrl, getSessionFile, formatDate } from '../../utils/media';
 
 // In-memory cache for media URLs so items don't flicker or get revoked during re-renders/dragging
 const mediaUrlCache = new Map<string, string>();
@@ -27,7 +27,7 @@ interface ImageItemProps {
   onDelete: (id: string, mediaId?: string) => void;
 }
 
-export const ImageItem: React.FC<ImageItemProps> = ({
+const ImageItemComponent: React.FC<ImageItemProps> = ({
   item,
   canvasWidth,
   onDragStart,
@@ -63,6 +63,18 @@ export const ImageItem: React.FC<ImageItemProps> = ({
         return;
       }
 
+      // Check session memory registry for instant zero-delay preview
+      const sessionFile = getSessionFile(item.mediaId);
+      if (sessionFile) {
+        const url = createSafeBlobUrl(sessionFile, sessionFile.type || 'image/jpeg');
+        if (url && isMounted) {
+          mediaUrlCache.set(item.mediaId, url);
+          setThumbUrl(url);
+          setLoading(false);
+          return;
+        }
+      }
+
       try {
         setLoading(true);
         setHasError(false);
@@ -81,7 +93,18 @@ export const ImageItem: React.FC<ImageItemProps> = ({
             setHasError(true);
           }
         } else if (!media && isMounted) {
-          setHasError(true);
+          // Double check session file as fallback
+          const sf = getSessionFile(item.mediaId);
+          if (sf) {
+            const url = createSafeBlobUrl(sf, sf.type || 'image/jpeg');
+            if (url) {
+              setThumbUrl(url);
+            } else {
+              setHasError(true);
+            }
+          } else {
+            setHasError(true);
+          }
         }
       } catch (e) {
         console.error('加载图片缩略图失败', e);
@@ -131,8 +154,9 @@ export const ImageItem: React.FC<ImageItemProps> = ({
       }}
       className="absolute top-0 left-0 transition-shadow duration-150 group touch-auto select-none"
     >
+      {/* Classic Polaroid Photo Card Container with thick white frame and chin */}
       <div
-        className="relative bg-[#FFFFFF] rounded-xl border border-[#E6E0D6] p-2.5 shadow-[var(--scrap-shadow)] hover:shadow-[var(--scrap-hover)] transition-all flex flex-col"
+        className="relative bg-[#FAF9F5] rounded-xs border border-[#E0D8CC] p-2.5 pt-2 pb-8 shadow-[0_4px_14px_rgba(0,0,0,0.08),0_1px_3px_rgba(0,0,0,0.05)] hover:shadow-[0_8px_22px_rgba(0,0,0,0.13)] transition-all flex flex-col"
         style={{
           minHeight: `${effectiveHeight}px`,
         }}
@@ -141,10 +165,10 @@ export const ImageItem: React.FC<ImageItemProps> = ({
         <div className="flex items-center justify-between pb-1.5 border-b border-black/5 mb-1.5">
           <div
             onPointerDown={(e) => onDragStart(e, item)}
-            className="flex-1 flex items-center justify-center py-1 cursor-grab active:cursor-grabbing touch-none select-none text-[#94887C] hover:text-[#4A3F35]"
+            className="flex-1 flex items-center justify-center py-0.5 cursor-grab active:cursor-grabbing touch-none select-none text-[#94887C] hover:text-[#4A3F35]"
             title="按住拖拽移动照片位置"
           >
-            <div className="h-2.5 w-16 rounded-xs bg-[#E5D7C3]/90 border border-black/10 flex items-center justify-center">
+            <div className="h-2.5 w-14 rounded-xs bg-[#E5D7C3]/90 border border-black/10 flex items-center justify-center">
               <GripHorizontal className="w-3 h-3 opacity-60" />
             </div>
           </div>
@@ -160,14 +184,6 @@ export const ImageItem: React.FC<ImageItemProps> = ({
             </button>
             <button
               type="button"
-              onClick={() => onResetTransform(item)}
-              className="p-1 rounded-md text-[#7D7062] hover:text-[#2D2721] hover:bg-black/5 transition-colors"
-              title="恢复默认大小与角度"
-            >
-              <RotateCcw className="w-3.5 h-3.5" />
-            </button>
-            <button
-              type="button"
               onClick={() => onDelete(item.id, item.mediaId)}
               className="p-1 rounded-md text-[#A85B5B] hover:text-[#C5221F] hover:bg-black/5 transition-colors"
               title="删除此图片"
@@ -177,10 +193,10 @@ export const ImageItem: React.FC<ImageItemProps> = ({
           </div>
         </div>
 
-        {/* Thumbnail area with Polaroid photo look */}
+        {/* Thumbnail area with dark matte Polaroid photo print frame */}
         <div
           onClick={() => onViewImage(item.mediaId)}
-          className="relative w-full flex-1 min-h-[100px] bg-[#F5F2ED] rounded-lg overflow-hidden flex items-center justify-center cursor-zoom-in group/img"
+          className="relative w-full flex-1 min-h-[110px] bg-[#1C1A18] rounded-2xs border border-black/15 shadow-[inset_0_1px_3px_rgba(0,0,0,0.25)] overflow-hidden flex items-center justify-center cursor-zoom-in group/img"
         >
           {loading ? (
             <div className="flex flex-col items-center gap-1 text-[#A09386]">
@@ -210,27 +226,28 @@ export const ImageItem: React.FC<ImageItemProps> = ({
           )}
         </div>
 
-        {/* Polaroid bottom caption / Original file link */}
-        {(fileMeta.fileName || fileMeta.sourceUrl) && (
-          <div className="mt-1.5 pt-1.5 border-t border-black/5 flex items-center justify-between text-[10px] text-[#827466]">
-            <a
-              href={fileMeta.sourceUrl?.startsWith('http') ? fileMeta.sourceUrl : undefined}
-              target={fileMeta.sourceUrl?.startsWith('http') ? '_blank' : undefined}
-              rel="noreferrer"
-              onClick={(e) => {
-                if (!fileMeta.sourceUrl?.startsWith('http')) {
-                  e.preventDefault();
-                  navigator.clipboard?.writeText(fileMeta.sourceUrl || fileMeta.fileName || '');
-                }
-              }}
-              className="flex items-center gap-1 max-w-full truncate hover:text-[#4A3F35] transition-colors"
-              title={`原文件地址: ${fileMeta.sourceUrl || fileMeta.fileName || ''} (点击复制或打开)`}
-            >
-              <Link2 className="w-3 h-3 shrink-0 opacity-70" />
-              <span className="truncate">{fileMeta.fileName || fileMeta.sourceUrl}</span>
-            </a>
-          </div>
-        )}
+        {/* Classic Polaroid Bottom White Frame Chin with Handwritten Label & Date */}
+        <div className="absolute bottom-1.5 left-2.5 right-2.5 flex items-center justify-between text-[11px] font-serif text-[#635547] select-none pointer-events-auto">
+          <a
+            href={fileMeta.sourceUrl?.startsWith('http') ? fileMeta.sourceUrl : undefined}
+            target={fileMeta.sourceUrl?.startsWith('http') ? '_blank' : undefined}
+            rel="noreferrer"
+            onClick={(e) => {
+              if (!fileMeta.sourceUrl?.startsWith('http')) {
+                e.preventDefault();
+                navigator.clipboard?.writeText(fileMeta.sourceUrl || fileMeta.fileName || '');
+              }
+            }}
+            className="flex items-center gap-1 max-w-[70%] truncate hover:text-[#2D241C] transition-colors"
+            title={`原文件地址: ${fileMeta.sourceUrl || fileMeta.fileName || ''} (点击复制或打开)`}
+          >
+            <Link2 className="w-3 h-3 shrink-0 opacity-60" />
+            <span className="truncate italic font-medium">{fileMeta.fileName || 'Polaroid Memory'}</span>
+          </a>
+          <span className="text-[10px] text-[#8C7D6E] font-sans tracking-tight">
+            {formatDate(item.createdAt)}
+          </span>
+        </div>
 
         {/* Bottom-left Corner Rotation Handle (Touch-friendly & Desktop) */}
         <div
@@ -257,3 +274,5 @@ export const ImageItem: React.FC<ImageItemProps> = ({
     </div>
   );
 };
+
+export const ImageItem = React.memo(ImageItemComponent);
