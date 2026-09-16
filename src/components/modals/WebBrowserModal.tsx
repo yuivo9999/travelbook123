@@ -123,7 +123,8 @@ export const WebBrowserModal: React.FC<WebBrowserModalProps> = ({
 
   const handleCopy = async () => {
     try {
-      await navigator.clipboard.writeText(url);
+      const targetUrl = resolvedMDouyinUrl || resolvedPcUrl || url;
+      await navigator.clipboard.writeText(targetUrl);
       setIsCopied(true);
       setTimeout(() => setIsCopied(false), 2000);
     } catch {
@@ -132,8 +133,11 @@ export const WebBrowserModal: React.FC<WebBrowserModalProps> = ({
   };
 
   const handleOpenExternal = () => {
-    window.open(url, '_blank', 'noopener,noreferrer');
+    const targetUrl = resolvedMDouyinUrl || resolvedPcUrl || url;
+    window.open(targetUrl, '_blank', 'noopener,noreferrer');
   };
+
+  const displayAddressUrl = isDouyin ? (resolvedMDouyinUrl || resolvedPcUrl || parsed.url) : parsed.url;
 
   return (
     <div
@@ -205,7 +209,7 @@ export const WebBrowserModal: React.FC<WebBrowserModalProps> = ({
           <div className="hidden md:flex flex-1 max-w-xl mx-2 items-center gap-1.5 px-3 py-1 bg-white/90 border border-[#D5CCC0] rounded-xl text-xs text-[#52463A] shadow-2xs">
             <Lock className="w-3 h-3 text-[#7B6E60] shrink-0" />
             <span className="truncate flex-1 font-mono text-[11px] select-all">
-              {parsed.url}
+              {displayAddressUrl}
             </span>
           </div>
 
@@ -263,7 +267,7 @@ export const WebBrowserModal: React.FC<WebBrowserModalProps> = ({
         <div className="flex md:hidden items-center gap-1.5 px-3 py-1.5 bg-[#F4EFE7] border-b border-[#E0D7CB] text-xs text-[#52463A]">
           <Lock className="w-3 h-3 text-[#7B6E60] shrink-0" />
           <span className="truncate flex-1 font-mono text-[11px] select-all">
-            {parsed.url}
+            {displayAddressUrl}
           </span>
         </div>
 
