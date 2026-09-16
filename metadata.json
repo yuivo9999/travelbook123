@@ -2,5 +2,7 @@
   "name": "数字手账本",
   "description": "本地化数字事件手账本 Web App，一事一本，自由剪贴记录文字、照片与视频，本地 IndexedDB 离线存储",
   "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
 }
