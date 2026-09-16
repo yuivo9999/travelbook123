@@ -1,6 +1,7 @@
 import React, { useRef, useState } from 'react';
-import { Type, Image as ImageIcon, Video as VideoIcon, X, Sparkles, Link2, Globe, FileCode } from 'lucide-react';
+import { Type, Image as ImageIcon, Video as VideoIcon, X, Sparkles, Link2, Globe, FileCode, CheckCircle2 } from 'lucide-react';
 import { pickFilesViaPicker } from '../../utils/media';
+import { isDirectImageUrl, isDirectVideoUrl, extractUrlAndTitleFromText } from '../../utils/webpage';
 
 interface AddContentModalProps {
   isOpen: boolean;
@@ -27,6 +28,7 @@ export const AddContentModal: React.FC<AddContentModalProps> = ({
   const [urlInput, setUrlInput] = useState('');
   const [urlType, setUrlType] = useState<'webpage' | 'image' | 'video'>('webpage');
   const [urlName, setUrlName] = useState('');
+  const [extractedNotice, setExtractedNotice] = useState<string | null>(null);
 
   const imageInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
@@ -38,7 +40,22 @@ export const AddContentModal: React.FC<AddContentModalProps> = ({
     setTextContent('');
     setUrlInput('');
     setUrlName('');
+    setExtractedNotice(null);
     onClose();
+  };
+
+  const handleUrlInputChange = (val: string) => {
+    const extracted = extractUrlAndTitleFromText(val);
+    if (extracted.isExtracted && extracted.url) {
+      setUrlInput(extracted.url);
+      if (extracted.extractedTitle && !urlName.trim()) {
+        setUrlName(extracted.extractedTitle);
+      }
+      setExtractedNotice(`已自动为您智能解析提取链接：${extracted.url}`);
+    } else {
+      setUrlInput(val);
+      setExtractedNotice(null);
+    }
   };
 
   const handleConfirmText = () => {
@@ -74,15 +91,28 @@ export const AddContentModal: React.FC<AddContentModalProps> = ({
   };
 
   const handleConfirmUrl = () => {
-    if (!urlInput.trim()) return;
-    if (urlType === 'webpage') {
+    const trimmed = urlInput.trim();
+    if (!trimmed) return;
+
+    const isImage = isDirectImageUrl(trimmed);
+    const isVideo = isDirectVideoUrl(trimmed);
+
+    if (urlType === 'image' || (urlType === 'webpage' && isImage)) {
+      if (onAddUrlMedia) {
+        onAddUrlMedia(trimmed, 'image', urlName.trim() || undefined);
+      }
+    } else if (urlType === 'video' || (urlType === 'webpage' && isVideo)) {
+      if (onAddUrlMedia) {
+        onAddUrlMedia(trimmed, 'video', urlName.trim() || undefined);
+      }
+    } else if (urlType === 'webpage') {
       if (onAddWebpage) {
-        onAddWebpage(urlInput.trim(), urlName.trim() || undefined);
+        onAddWebpage(trimmed, urlName.trim() || undefined);
       } else if (onAddUrlMedia) {
-        onAddUrlMedia(urlInput.trim(), 'video', urlName.trim() || undefined);
+        onAddUrlMedia(trimmed, 'video', urlName.trim() || undefined);
       }
     } else if (onAddUrlMedia) {
-      onAddUrlMedia(urlInput.trim(), urlType, urlName.trim() || undefined);
+      onAddUrlMedia(trimmed, urlType, urlName.trim() || undefined);
     }
     handleClose();
   };
@@ -107,7 +137,7 @@ export const AddContentModal: React.FC<AddContentModalProps> = ({
         ref={imageInputRef}
         type="file"
         multiple
-        accept="image/*,.jpg,.jpeg,.png,.gif,.webp,.heic,.bmp,.svg"
+        accept="image/*,.jpg,.jpeg,.png,.gif,.webp,.avif,.bmp,.svg,.ico,.tiff,.heic"
         className="hidden"
         onChange={handleImageChange}
       />
@@ -115,7 +145,7 @@ export const AddContentModal: React.FC<AddContentModalProps> = ({
         ref={videoInputRef}
         type="file"
         multiple
-        accept="video/*,.mp4,.mov,.webm,.m4v,.ogv,.avi,.mkv"
+        accept="video/*,.mp4,.mov,.webm,.m3u8,.m4v,.ogv,.avi,.mkv,.ts"
         className="hidden"
         onChange={handleVideoChange}
       />
@@ -310,26 +340,33 @@ export const AddContentModal: React.FC<AddContentModalProps> = ({
             <div>
               <label className="block text-[11px] font-medium text-[#73685C] mb-1">
                 {urlType === 'webpage'
-                  ? '网页地址或视频网站链接：'
+                  ? '网页地址 / 抖音口令 / 视频网站链接：'
                   : urlType === 'image'
-                  ? '图片原文件网络地址 (URL)：'
-                  : '视频原文件网络地址 (MP4/WebM URL)：'}
+                  ? '图片直链 (支持 PNG/JPG/WebP/AVIF/SVG/GIF/DataURI 等)：'
+                  : '视频直链 (支持 MP4/m3u8/WebM/MOV/M4V/OGV 等)：'}
               </label>
               <input
-                type="url"
+                type="text"
                 value={urlInput}
-                onChange={(e) => setUrlInput(e.target.value)}
+                onChange={(e) => handleUrlInputChange(e.target.value)}
                 placeholder={
                   urlType === 'webpage'
-                    ? 'https://www.bilibili.com/video/... 或 https://... 或 任意网页'
+                    ? '粘贴完整网页链接或抖音分享口令文字（例如：https://v.douyin.com/... 或 https://...）'
                     : urlType === 'image'
-                    ? 'https://.../photo.jpg'
-                    : 'https://.../video.mp4'
+                    ? 'https://.../photo.webp 或 https://.../image.png'
+                    : 'https://.../stream.m3u8 或 https://.../video.mp4'
                 }
                 autoFocus
                 className="w-full px-3 py-2 text-xs rounded-xl bg-white border border-[#DCD3C7] text-[#2D2721] focus:outline-hidden focus:ring-2 focus:ring-[#8C7A68]"
               />
             </div>
+
+            {extractedNotice && (
+              <div className="p-2 rounded-xl bg-[#F0FDF4] border border-[#BBF7D0] text-[11px] text-[#166534] flex items-center gap-1.5 animate-fadeIn">
+                <CheckCircle2 className="w-3.5 h-3.5 text-[#16A34A] shrink-0" />
+                <span className="truncate">{extractedNotice}</span>
+              </div>
+            )}
 
             <div>
               <label className="block text-[11px] font-medium text-[#73685C] mb-1">
@@ -344,7 +381,7 @@ export const AddContentModal: React.FC<AddContentModalProps> = ({
                     ? '例如：旅行记录视频 / 攻略文章'
                     : urlType === 'image'
                     ? 'photo.jpg'
-                    : 'video.mp4'
+                    : 'video.m3u8'
                 }
                 className="w-full px-3 py-2 text-xs rounded-xl bg-white border border-[#DCD3C7] text-[#2D2721] focus:outline-hidden focus:ring-2 focus:ring-[#8C7A68]"
               />
@@ -356,6 +393,22 @@ export const AddContentModal: React.FC<AddContentModalProps> = ({
                 <Globe className="w-3.5 h-3.5 shrink-0 mt-0.5" />
                 <span>
                   贴入后将生成网页书签卡片。点击即可在手账内置窗口中<b>浏览网页</b>及<b>播放网页视频</b>，还支持自由缩放、旋转与拖拽摆放。
+                </span>
+              </div>
+            )}
+            {urlType === 'video' && (
+              <div className="p-2.5 rounded-xl bg-[#F6F3ED] border border-[#E2DAD0] text-[11px] text-[#635547] leading-relaxed flex items-start gap-1.5">
+                <VideoIcon className="w-3.5 h-3.5 shrink-0 mt-0.5 text-[#8C7A68]" />
+                <span>
+                  已支持 <b>m3u8 HLS 流媒体</b>、MP4、WebM、MOV 等常见网络视频格式，支持内置流媒体渲染与全屏观看。
+                </span>
+              </div>
+            )}
+            {urlType === 'image' && (
+              <div className="p-2.5 rounded-xl bg-[#F6F3ED] border border-[#E2DAD0] text-[11px] text-[#635547] leading-relaxed flex items-start gap-1.5">
+                <ImageIcon className="w-3.5 h-3.5 shrink-0 mt-0.5 text-[#8C7A68]" />
+                <span>
+                  已支持 <b>WebP、AVIF、SVG、GIF 动态图、BMP、ICO、TIFF、JPEG、PNG 及 Base64 Data URI</b> 等所有常见网页图片。
                 </span>
               </div>
             )}

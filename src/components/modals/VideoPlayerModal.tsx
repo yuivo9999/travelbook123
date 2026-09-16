@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { X, Loader2, AlertTriangle, FolderSearch, Link2, Film } from 'lucide-react';
+import Hls from 'hls.js';
 import { getMedia, updateMediaSource } from '../../db/indexedDB';
 import { resolveOriginalMedia, registerSessionFile, pickFilesViaPicker } from '../../utils/media';
 
@@ -113,6 +114,48 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
       cleanupActiveUrl();
     };
   }, [isOpen, mediaId]);
+
+  // Support HLS .m3u8 streaming player
+  useEffect(() => {
+    if (!videoUrl || !videoRef.current) return;
+
+    const isM3u8 =
+      videoUrl.includes('.m3u8') ||
+      videoUrl.includes('m3u8') ||
+      videoUrl.includes('application/x-mpegurl');
+
+    let hls: Hls | null = null;
+
+    if (isM3u8) {
+      if (Hls.isSupported()) {
+        hls = new Hls({
+          enableWorker: true,
+          lowLatencyMode: true,
+        });
+        hls.loadSource(videoUrl);
+        hls.attachMedia(videoRef.current);
+        hls.on(Hls.Events.MANIFEST_PARSED, () => {
+          videoRef.current?.play().catch(() => {});
+        });
+        hls.on(Hls.Events.ERROR, (_evt, data) => {
+          if (data.fatal) {
+            console.warn('HLS stream error:', data);
+          }
+        });
+      } else if (videoRef.current.canPlayType('application/vnd.apple.mpegurl')) {
+        videoRef.current.src = videoUrl;
+        videoRef.current.play().catch(() => {});
+      }
+    } else {
+      videoRef.current.src = videoUrl;
+    }
+
+    return () => {
+      if (hls) {
+        hls.destroy();
+      }
+    };
+  }, [videoUrl]);
 
   // Handle ESC key
   useEffect(() => {

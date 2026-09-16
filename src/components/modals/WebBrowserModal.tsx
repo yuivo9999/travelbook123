@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   X,
   ExternalLink,
@@ -13,6 +13,7 @@ import {
   Film,
   AlertCircle,
 } from 'lucide-react';
+import Hls from 'hls.js';
 import { parseWebUrlInfo } from '../../utils/webpage';
 
 interface WebBrowserModalProps {
@@ -32,12 +33,49 @@ export const WebBrowserModal: React.FC<WebBrowserModalProps> = ({
   const [isCopied, setIsCopied] = useState(false);
   const [isMaximized, setIsMaximized] = useState(false);
   const [hasIframeLoadError, setHasIframeLoadError] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
 
-  if (!isOpen || !url) return null;
-
-  const parsed = parseWebUrlInfo(url, title);
+  const parsed = parseWebUrlInfo(url || '', title);
   const effectiveTitle = title || parsed.suggestedTitle;
   const isDirectVideo = parsed.isDirectVideoFile;
+
+  useEffect(() => {
+    if (!isOpen || !url || !isDirectVideo || !videoRef.current) return;
+
+    const isM3u8 =
+      url.includes('.m3u8') ||
+      url.includes('m3u8') ||
+      url.includes('application/x-mpegurl');
+
+    let hls: Hls | null = null;
+
+    if (isM3u8) {
+      if (Hls.isSupported()) {
+        hls = new Hls({
+          enableWorker: true,
+          lowLatencyMode: true,
+        });
+        hls.loadSource(url);
+        hls.attachMedia(videoRef.current);
+        hls.on(Hls.Events.MANIFEST_PARSED, () => {
+          videoRef.current?.play().catch(() => {});
+        });
+      } else if (videoRef.current.canPlayType('application/vnd.apple.mpegurl')) {
+        videoRef.current.src = url;
+        videoRef.current.play().catch(() => {});
+      }
+    } else {
+      videoRef.current.src = url;
+    }
+
+    return () => {
+      if (hls) {
+        hls.destroy();
+      }
+    };
+  }, [isOpen, url, isDirectVideo, iframeKey]);
+
+  if (!isOpen || !url) return null;
 
   const handleRefresh = () => {
     setIframeKey((prev) => prev + 1);
@@ -192,9 +230,26 @@ export const WebBrowserModal: React.FC<WebBrowserModalProps> = ({
 
         {/* Web Browser Frame Content */}
         <div className="flex-1 bg-white relative overflow-hidden flex flex-col">
+          {(parsed.siteName.includes('抖音') || parsed.hostname.includes('douyin')) && (
+            <div className="bg-[#FEF2F2] border-b border-[#FCA5A5] px-3 py-1.5 text-[11px] text-[#991B1B] flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-1.5">
+                <Film className="w-3.5 h-3.5 text-[#DC2626] shrink-0" />
+                <span>已兼容抖音视频（自动识别 v.douyin.com 短链与 iesdouyin 分享页）</span>
+              </div>
+              <button
+                type="button"
+                onClick={handleOpenExternal}
+                className="font-medium underline hover:text-[#7F1D1D] flex items-center gap-0.5"
+              >
+                全屏高清观看 <ExternalLink className="w-3 h-3" />
+              </button>
+            </div>
+          )}
+
           {isDirectVideo ? (
             <div className="w-full h-full bg-black flex items-center justify-center">
               <video
+                ref={videoRef}
                 key={iframeKey}
                 src={parsed.url}
                 controls
@@ -208,6 +263,7 @@ export const WebBrowserModal: React.FC<WebBrowserModalProps> = ({
               key={iframeKey}
               src={parsed.embedUrl || parsed.url}
               title={effectiveTitle}
+              referrerPolicy="no-referrer"
               className="w-full h-full border-0 bg-white"
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
               allowFullScreen

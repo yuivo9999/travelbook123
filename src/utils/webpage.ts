@@ -22,6 +22,8 @@ const KNOWN_SITES: Record<string, string> = {
   'xiaohongshu.com': '小红书 RED',
   'weibo.com': '新浪微博 Weibo',
   'douyin.com': '抖音 Douyin',
+  'iesdouyin.com': '抖音 Douyin',
+  'v.douyin.com': '抖音 Douyin',
   'douban.com': '豆瓣 Douban',
   'wikipedia.org': '维基百科 Wikipedia',
   'github.com': 'GitHub',
@@ -35,9 +37,60 @@ const KNOWN_SITES: Record<string, string> = {
   'medium.com': 'Medium',
 };
 
+export function extractUrlAndTitleFromText(rawInput: string): {
+  url: string;
+  extractedTitle: string;
+  isExtracted: boolean;
+} {
+  if (!rawInput) return { url: '', extractedTitle: '', isExtracted: false };
+
+  const text = rawInput.trim();
+
+  // Find http/https URL using regex
+  const urlMatch = text.match(/(https?:\/\/[^\s\u4e00-\u9fa5,，!！;；()（）<>"']+)/i);
+  if (!urlMatch) {
+    return { url: text, extractedTitle: '', isExtracted: false };
+  }
+
+  const rawUrl = urlMatch[1];
+  // Clean trailing punctuation
+  const cleanUrl = rawUrl.replace(/[,，!！;；()（）<>"']+$|[\s]+$/g, '');
+
+  // Check if input was purely the URL
+  if (text === cleanUrl || text === rawUrl) {
+    return { url: cleanUrl, extractedTitle: '', isExtracted: false };
+  }
+
+  // Remove the URL from original text to extract title/caption
+  let remainingText = text.replace(rawUrl, '').replace(cleanUrl, '');
+
+  // Clean common Douyin/Kuaishou/social sharing fluff text
+  remainingText = remainingText
+    .replace(/复制此链接[，,].*/gi, '')
+    .replace(/打开Dou音搜索.*$/gi, '')
+    .replace(/打开抖音搜索.*$/gi, '')
+    .replace(/打开抖音[，,].*$/gi, '')
+    .replace(/打开Dou音[，,].*$/gi, '')
+    .replace(/直接观看视频[！!]?/gi, '')
+    .replace(/^[0-9.]+\s+[0-9/]+\s+[a-zA-Z0-9@./:]+/gi, '') // e.g., "2.53 08/31 o@D.us JVy:/"
+    .replace(/[\s\t\n]+/g, ' ')
+    .trim();
+
+  return {
+    url: cleanUrl,
+    extractedTitle: remainingText || '',
+    isExtracted: true,
+  };
+}
+
 export function normalizeWebUrl(rawUrl: string): string {
   let url = rawUrl.trim();
   if (!url) return '';
+
+  // Extract URL if full sharing text was pasted
+  const extracted = extractUrlAndTitleFromText(url);
+  url = extracted.url;
+
   if (!/^https?:\/\//i.test(url) && !url.startsWith('//')) {
     url = 'https://' + url;
   }
@@ -71,8 +124,13 @@ export function parseWebUrlInfo(rawUrl: string, customTitle?: string): ParsedWeb
     siteName = hostname ? hostname.charAt(0).toUpperCase() + hostname.slice(1) : '网页';
   }
 
-  // Direct video file check
-  const isDirectVideoFile = /\.(mp4|webm|ogv|mov|m4v)(\?.*)?$/i.test(url);
+  // Direct video file check (including m3u8, mp4, webm, mov, m4v, ogv, ts, flv, etc.)
+  const cleanUrl = url.split('?')[0].split('#')[0].toLowerCase();
+  const isDirectVideoFile =
+    /\.(mp4|webm|ogv|mov|m4v|m3u8|ts|flv|mkv|avi)(\?.*)?$/i.test(url) ||
+    cleanUrl.endsWith('.m3u8') ||
+    url.includes('m3u8') ||
+    url.includes('application/x-mpegurl');
 
   // Favicon
   const faviconUrl = hostname
@@ -127,14 +185,21 @@ export function parseWebUrlInfo(rawUrl: string, customTitle?: string): ParsedWeb
       embedUrl = `https://player.youku.com/embed/${youkuMatch[1]}?autoplay=1`;
     }
   }
-  // 5. Douyin / TikTok / X / other video sites
+  // 5. Douyin / TikTok / Kuaishou / Shorts
   else if (
-    hostname.includes('douyin.com') ||
+    hostname.includes('douyin') ||
     hostname.includes('tiktok.com') ||
     hostname.includes('kuaishou.com') ||
     hostname.includes('b23.tv')
   ) {
     isVideoSite = true;
+    siteName = '抖音 Douyin';
+    const douyinMatch =
+      pathname.match(/\/(?:share\/video|video|modal\/video)\/(\d+)/i) ||
+      url.match(/video\/(\d+)/i);
+    if (douyinMatch && douyinMatch[1]) {
+      embedUrl = `https://www.iesdouyin.com/share/video/${douyinMatch[1]}/`;
+    }
   }
 
   // Suggested title
@@ -157,4 +222,39 @@ export function parseWebUrlInfo(rawUrl: string, customTitle?: string): ParsedWeb
     isDirectVideoFile,
     suggestedTitle,
   };
+}
+
+export function isDirectImageUrl(rawUrl: string): boolean {
+  if (!rawUrl) return false;
+  const url = rawUrl.trim();
+  if (/^data:image\//i.test(url)) return true;
+  const cleanUrl = url.split('?')[0].split('#')[0].toLowerCase();
+  return (
+    /\.(png|jpe?g|webp|avif|gif|svg|bmp|ico|tiff?|heic|heif)(\?.*)?$/i.test(url) ||
+    cleanUrl.endsWith('.png') ||
+    cleanUrl.endsWith('.jpg') ||
+    cleanUrl.endsWith('.jpeg') ||
+    cleanUrl.endsWith('.webp') ||
+    cleanUrl.endsWith('.avif') ||
+    cleanUrl.endsWith('.gif') ||
+    cleanUrl.endsWith('.svg') ||
+    cleanUrl.endsWith('.bmp') ||
+    cleanUrl.endsWith('.ico') ||
+    cleanUrl.endsWith('.tiff') ||
+    cleanUrl.endsWith('.tif')
+  );
+}
+
+export function isDirectVideoUrl(rawUrl: string): boolean {
+  if (!rawUrl) return false;
+  const url = rawUrl.trim();
+  const cleanUrl = url.split('?')[0].split('#')[0].toLowerCase();
+  return (
+    /\.(mp4|webm|ogv|mov|m4v|m3u8|ts|flv|mkv|avi)(\?.*)?$/i.test(url) ||
+    cleanUrl.endsWith('.m3u8') ||
+    cleanUrl.endsWith('.mp4') ||
+    cleanUrl.endsWith('.webm') ||
+    url.includes('m3u8') ||
+    url.includes('application/x-mpegurl')
+  );
 }
