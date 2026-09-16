@@ -934,14 +934,8 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
     }
   };
 
-  const paperPatternClass = {
-    dots: 'paper-pattern-dots',
-    grid: 'paper-pattern-grid',
-    lines: 'paper-pattern-lines',
-    blank: 'paper-pattern-blank',
-    craft: 'paper-pattern-craft',
-    textured: 'paper-pattern-textured',
-  }[paperPattern] || 'paper-pattern-dots';
+  const currentPaperConfig = PAPER_PATTERNS.find((p) => p.id === paperPattern);
+  const paperPatternClass = currentPaperConfig ? currentPaperConfig.cssClass : `paper-pattern-${paperPattern}`;
 
   const paperCornerClass = {
     rounded: 'paper-style-rounded',
