@@ -195,8 +195,8 @@ export function parseWebUrlInfo(rawUrl: string, customTitle?: string): ParsedWeb
     isVideoSite = true;
     siteName = '抖音 Douyin';
     const douyinMatch =
-      pathname.match(/\/(?:share\/video|video|modal\/video)\/(\d+)/i) ||
-      url.match(/video\/(\d+)/i);
+      pathname.match(/\/(?:share\/video|video|modal\/video)\/(\d{15,25})(?:\/|[?#]|$)/i) ||
+      url.match(/\/(?:share\/video|video|modal\/video)\/(\d{15,25})(?:\/|[?#]|$)/i);
     if (douyinMatch && douyinMatch[1]) {
       embedUrl = `https://m.douyin.com/share/video/${douyinMatch[1]}`;
     }
