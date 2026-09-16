@@ -34,16 +34,12 @@ async function startServer() {
       });
 
       const finalUrl = response.url || urlToFetch;
-      // Douyin can redirect short share URLs to iesdouyin.com, www.douyin.com,
-      // m.douyin.com, or other share/video variants. Only the numeric video ID
-      // is part of the canonical URL; tracking/query parameters are discarded.
-      const videoIdMatch =
-        finalUrl.match(/\/(?:share\/video|video|modal\/video)\/(\d{15,25})(?:\/|[?#]|$)/i) ||
-        finalUrl.match(/[?&](?:modal_id|vid|video_id)=(\d{15,25})(?:&|$)/i) ||
-        targetUrl.match(/\/(?:share\/video|video|modal\/video)\/(\d{15,25})(?:\/|[?#]|$)/i);
+      const match =
+        finalUrl.match(/video\/(\d+)/i) ||
+        finalUrl.match(/modal\/video\/(\d+)/i) ||
+        targetUrl.match(/video\/(\d+)/i);
 
-      const videoId = videoIdMatch ? videoIdMatch[1] : '';
-      const mDouyinUrl = videoId ? `https://m.douyin.com/share/video/${videoId}` : finalUrl;
+      const videoId = match ? match[1] : '';
       const openEmbedUrl = videoId
         ? `https://open.douyin.com/player/video?vid=${videoId}`
         : finalUrl;
@@ -54,7 +50,6 @@ async function startServer() {
         originalUrl: targetUrl,
         finalUrl,
         videoId,
-        mDouyinUrl,
         openEmbedUrl,
         pcUrl,
       });
