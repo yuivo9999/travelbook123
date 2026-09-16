@@ -276,3 +276,73 @@ export async function deleteMedia(id: string): Promise<void> {
     request.onerror = () => reject(new Error('删除媒体数据失败'));
   });
 }
+
+// ----------------- Stats & Maintenance -----------------
+
+export async function getAllItems(): Promise<ContentItem[]> {
+  const db = await openDatabase();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('items', 'readonly');
+    const store = tx.objectStore('items');
+    const request = store.getAll();
+
+    request.onsuccess = () => resolve(request.result || []);
+    request.onerror = () => reject(new Error('读取所有内容项失败'));
+  });
+}
+
+export async function getDatabaseStats(): Promise<{
+  notebookCount: number;
+  itemCount: number;
+  mediaCount: number;
+}> {
+  const db = await openDatabase();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(['notebooks', 'items', 'media'], 'readonly');
+    const nbStore = tx.objectStore('notebooks');
+    const itemStore = tx.objectStore('items');
+    const mediaStore = tx.objectStore('media');
+
+    let nbCount = 0;
+    let itemCount = 0;
+    let mediaCount = 0;
+
+    const nbReq = nbStore.count();
+    nbReq.onsuccess = () => {
+      nbCount = nbReq.result;
+    };
+
+    const itemReq = itemStore.count();
+    itemReq.onsuccess = () => {
+      itemCount = itemReq.result;
+    };
+
+    const mediaReq = mediaStore.count();
+    mediaReq.onsuccess = () => {
+      mediaCount = mediaReq.result;
+    };
+
+    tx.oncomplete = () => {
+      resolve({
+        notebookCount: nbCount,
+        itemCount,
+        mediaCount,
+      });
+    };
+
+    tx.onerror = () => reject(new Error('获取存储统计数据失败'));
+  });
+}
+
+export async function clearAllDatabaseData(): Promise<void> {
+  const db = await openDatabase();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(['notebooks', 'items', 'media'], 'readwrite');
+    tx.objectStore('notebooks').clear();
+    tx.objectStore('items').clear();
+    tx.objectStore('media').clear();
+
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(new Error('清空手账数据失败'));
+  });
+}

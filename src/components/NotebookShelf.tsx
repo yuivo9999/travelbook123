@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, BookOpen, Sparkles, X } from 'lucide-react';
+import { Plus, BookOpen, Settings, Sparkles, X } from 'lucide-react';
 import { Notebook } from '../types';
 import { NotebookCard } from './NotebookCard';
 import { ConfirmDialog } from './modals/ConfirmDialog';
@@ -9,6 +9,7 @@ interface NotebookShelfProps {
   onCreateNotebook: (title: string) => Promise<string>;
   onOpenNotebook: (id: string) => void;
   onDeleteNotebook: (id: string) => Promise<void>;
+  onOpenSettings: () => void;
 }
 
 export const NotebookShelf: React.FC<NotebookShelfProps> = ({
@@ -16,6 +17,7 @@ export const NotebookShelf: React.FC<NotebookShelfProps> = ({
   onCreateNotebook,
   onOpenNotebook,
   onDeleteNotebook,
+  onOpenSettings,
 }) => {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [newTitle, setNewTitle] = useState('');
@@ -48,7 +50,7 @@ export const NotebookShelf: React.FC<NotebookShelfProps> = ({
   };
 
   return (
-    <div className="min-h-screen bg-[#F4EFEA] text-[#2D2721] flex flex-col">
+    <div className="min-h-screen flex flex-col">
       {/* Top Header */}
       <header className="sticky top-0 z-30 bg-[#FAF7F2]/90 backdrop-blur-md border-b border-[#E5DFD5] px-4 sm:px-6 py-3.5">
         <div className="max-w-4xl mx-auto flex items-center justify-between">
@@ -57,20 +59,33 @@ export const NotebookShelf: React.FC<NotebookShelfProps> = ({
               <BookOpen className="w-5 h-5" />
             </div>
             <div>
-              <h1 className="text-lg font-bold text-[#2D2721] tracking-tight">我的手账</h1>
-              <p className="text-[11px] text-[#85786B]">一个事件 · 一本独立手账 · 本地私密保存</p>
+              <h1 className="text-lg font-bold tracking-tight">我的手账</h1>
+              <p className="text-[11px] opacity-75">一个事件 · 一本独立手账 · 本地私密保存</p>
             </div>
           </div>
 
-          <button
-            type="button"
-            id="btn-open-create-notebook"
-            onClick={() => setIsCreateModalOpen(true)}
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#4A3F35] hover:bg-[#382F26] text-[#FAF8F5] text-xs sm:text-sm font-medium transition-all active:scale-95 shadow-sm"
-          >
-            <Plus className="w-4 h-4" />
-            <span>新建手账</span>
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              id="btn-open-settings"
+              onClick={onOpenSettings}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/80 hover:bg-white border border-[#DDD4C7] text-[#4A3F35] text-xs sm:text-sm font-medium transition-all active:scale-95 shadow-2xs"
+              title="应用设置与视觉定制"
+            >
+              <Settings className="w-4 h-4 text-[#7D6F61]" />
+              <span className="hidden sm:inline">设置</span>
+            </button>
+
+            <button
+              type="button"
+              id="btn-open-create-notebook"
+              onClick={() => setIsCreateModalOpen(true)}
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#4A3F35] hover:bg-[#382F26] text-[#FAF8F5] text-xs sm:text-sm font-medium transition-all active:scale-95 shadow-sm"
+            >
+              <Plus className="w-4 h-4" />
+              <span>新建手账</span>
+            </button>
+          </div>
         </div>
       </header>
 

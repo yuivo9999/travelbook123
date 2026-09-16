@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Book, Calendar, Layers, Trash2, ArrowRight } from 'lucide-react';
 import { Notebook } from '../types';
-import { formatDate } from '../utils/media';
+import { formatDate, createSafeBlobUrl } from '../utils/media';
 import { getMedia } from '../db/indexedDB';
 
 interface NotebookCardProps {
@@ -27,7 +27,7 @@ export const NotebookCard: React.FC<NotebookCardProps> = ({
         const media = await getMedia(notebook.coverImageId);
         if (media && isMounted) {
           const blob = media.thumbnailBlob || media.blob;
-          activeUrl = URL.createObjectURL(blob);
+          activeUrl = createSafeBlobUrl(blob, media.mimeType || 'image/jpeg');
           setCoverUrl(activeUrl);
         }
       } catch {
@@ -39,7 +39,7 @@ export const NotebookCard: React.FC<NotebookCardProps> = ({
 
     return () => {
       isMounted = false;
-      if (activeUrl) URL.revokeObjectURL(activeUrl);
+      if (activeUrl && activeUrl.startsWith('blob:')) URL.revokeObjectURL(activeUrl);
     };
   }, [notebook.coverImageId]);
 

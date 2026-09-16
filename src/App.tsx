@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Notebook } from './types';
+import { Notebook, AppSettings } from './types';
 import {
   getAllNotebooks,
   saveNotebook,
@@ -9,6 +9,8 @@ import {
 import { NotebookShelf } from './components/NotebookShelf';
 import { NotebookView } from './components/NotebookView';
 import { ToastContainer, ToastMessage } from './components/common/Toast';
+import { SettingsModal } from './components/modals/SettingsModal';
+import { loadSettings, saveSettings, BACKGROUND_SKINS } from './utils/settings';
 
 export default function App() {
   const [notebooks, setNotebooks] = useState<Notebook[]>([]);
@@ -16,6 +18,8 @@ export default function App() {
   const [activeNotebook, setActiveNotebook] = useState<Notebook | null>(null);
   const [loading, setLoading] = useState(true);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
+  const [settings, setSettings] = useState<AppSettings>(loadSettings);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   const showToast = useCallback(
     (text: string, type: 'error' | 'success' | 'info' = 'info') => {
@@ -28,6 +32,11 @@ export default function App() {
   const dismissToast = useCallback((id: string) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
+
+  const handleUpdateSettings = (newSettings: AppSettings) => {
+    setSettings(newSettings);
+    saveSettings(newSettings);
+  };
 
   // Fetch all notebooks
   const refreshNotebooks = useCallback(async () => {
@@ -81,7 +90,8 @@ export default function App() {
       createdAt: Date.now(),
       updatedAt: Date.now(),
       itemCount: 0,
-      paperPattern: 'dots',
+      paperPattern: settings.defaultPaperPattern,
+      backgroundSkin: settings.backgroundSkin,
     };
 
     try {
@@ -123,15 +133,39 @@ export default function App() {
     refreshNotebooks();
   };
 
+  // Active background skin resolution
+  const activeSkinId = activeNotebook?.backgroundSkin || settings.backgroundSkin;
+  const currentSkinConfig =
+    BACKGROUND_SKINS.find((s) => s.id === activeSkinId) || BACKGROUND_SKINS[0];
+
   return (
-    <div className="min-h-screen bg-[#F4EFEA] text-[#2D2721] selection:bg-[#E5D7C3] selection:text-[#2D2721]">
+    <div
+      className={`min-h-screen ${currentSkinConfig.bgClass} ${currentSkinConfig.textClass} transition-colors duration-300 selection:bg-[#E5D7C3] selection:text-[#2D2721]`}
+    >
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />
+
+      <SettingsModal
+        isOpen={isSettingsOpen}
+        settings={settings}
+        onUpdateSettings={handleUpdateSettings}
+        onClose={() => setIsSettingsOpen(false)}
+        onDataReset={() => {
+          setActiveNotebookId(null);
+          refreshNotebooks();
+        }}
+        onDataImported={() => {
+          refreshNotebooks();
+        }}
+        showToast={showToast}
+      />
 
       {activeNotebook ? (
         <NotebookView
           notebook={activeNotebook}
+          settings={settings}
           onBack={handleBackToShelf}
           onUpdateNotebook={handleUpdateNotebook}
+          onOpenSettings={() => setIsSettingsOpen(true)}
           showToast={showToast}
         />
       ) : (
@@ -140,6 +174,7 @@ export default function App() {
           onCreateNotebook={handleCreateNotebook}
           onOpenNotebook={(id) => setActiveNotebookId(id)}
           onDeleteNotebook={handleDeleteNotebook}
+          onOpenSettings={() => setIsSettingsOpen(true)}
         />
       )}
     </div>

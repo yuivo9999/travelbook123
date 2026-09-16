@@ -1,5 +1,23 @@
 export type ItemType = 'text' | 'image' | 'video';
 
+export type BackgroundSkin =
+  | 'warm-kraft'
+  | 'vintage-parchment'
+  | 'cool-slate'
+  | 'night-journal'
+  | 'matcha-tea'
+  | 'sakura-blush';
+
+export type PaperStyle = 'dots' | 'grid' | 'lines' | 'blank' | 'craft' | 'textured';
+
+export interface AppSettings {
+  backgroundSkin: BackgroundSkin;
+  defaultPaperPattern: PaperStyle;
+  snapToGrid: boolean;
+  paperCornerStyle: 'rounded' | 'sharp' | 'stamp';
+  showGridGuides: boolean;
+}
+
 export interface Notebook {
   id: string;
   title: string;
@@ -7,7 +25,8 @@ export interface Notebook {
   updatedAt: number;
   itemCount?: number;
   coverImageId?: string; // thumbnail media id of the first image
-  paperPattern?: 'dots' | 'grid' | 'lines' | 'blank';
+  paperPattern?: PaperStyle;
+  backgroundSkin?: BackgroundSkin;
 }
 
 export interface ContentItem {

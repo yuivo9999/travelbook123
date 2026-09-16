@@ -75,14 +75,14 @@ export const AddContentModal: React.FC<AddContentModalProps> = ({
       <input
         ref={imageInputRef}
         type="file"
-        accept="image/jpeg,image/png,image/webp,image/gif"
+        accept="image/*"
         className="hidden"
         onChange={handleImageChange}
       />
       <input
         ref={videoInputRef}
         type="file"
-        accept="video/mp4,video/webm,video/quicktime,video/mov"
+        accept="video/*"
         className="hidden"
         onChange={handleVideoChange}
       />

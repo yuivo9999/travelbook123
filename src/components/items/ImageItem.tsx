@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { GripHorizontal, Trash2, Maximize2, Image as ImageIcon } from 'lucide-react';
 import { ContentItem } from '../../types';
 import { getMedia } from '../../db/indexedDB';
+import { createSafeBlobUrl } from '../../utils/media';
 
 interface ImageItemProps {
   item: ContentItem;
@@ -20,6 +21,7 @@ export const ImageItem: React.FC<ImageItemProps> = ({
 }) => {
   const [thumbUrl, setThumbUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [hasError, setHasError] = useState(false);
 
   useEffect(() => {
     let activeUrl: string | null = null;
@@ -31,14 +33,19 @@ export const ImageItem: React.FC<ImageItemProps> = ({
         return;
       }
       try {
+        setLoading(true);
+        setHasError(false);
         const media = await getMedia(item.mediaId);
         if (media && isMounted) {
           const blobToUse = media.thumbnailBlob || media.blob;
-          activeUrl = URL.createObjectURL(blobToUse);
+          activeUrl = createSafeBlobUrl(blobToUse, media.mimeType || 'image/jpeg');
           setThumbUrl(activeUrl);
+        } else if (!media && isMounted) {
+          setHasError(true);
         }
       } catch (e) {
         console.error('加载图片缩略图失败', e);
+        if (isMounted) setHasError(true);
       } finally {
         if (isMounted) setLoading(false);
       }
@@ -48,11 +55,28 @@ export const ImageItem: React.FC<ImageItemProps> = ({
 
     return () => {
       isMounted = false;
-      if (activeUrl) {
+      if (activeUrl && activeUrl.startsWith('blob:')) {
         URL.revokeObjectURL(activeUrl);
       }
     };
   }, [item.mediaId]);
+
+  const handleImageError = async () => {
+    if (!item.mediaId) return;
+    try {
+      const media = await getMedia(item.mediaId);
+      if (media?.blob) {
+        const fullUrl = createSafeBlobUrl(media.blob, media.mimeType || 'image/jpeg');
+        if (fullUrl && fullUrl !== thumbUrl) {
+          setThumbUrl(fullUrl);
+          return;
+        }
+      }
+    } catch {
+      // ignore
+    }
+    setHasError(true);
+  };
 
   const effectiveWidth = Math.min(item.width || 240, canvasWidth - 32);
 
@@ -109,12 +133,13 @@ export const ImageItem: React.FC<ImageItemProps> = ({
               <ImageIcon className="w-6 h-6 animate-pulse" />
               <span className="text-[10px]">读取图片...</span>
             </div>
-          ) : thumbUrl ? (
+          ) : thumbUrl && !hasError ? (
             <>
               <img
                 src={thumbUrl}
                 alt="手账照片"
                 loading="lazy"
+                onError={handleImageError}
                 className="w-full h-full object-cover select-none transition-transform duration-300 group-hover/img:scale-102"
               />
               <div className="absolute inset-0 bg-black/0 group-hover/img:bg-black/10 transition-colors flex items-center justify-center opacity-0 group-hover/img:opacity-100">
@@ -124,7 +149,10 @@ export const ImageItem: React.FC<ImageItemProps> = ({
               </div>
             </>
           ) : (
-            <div className="text-xs text-[#9E9082]">暂无图片数据</div>
+            <div className="flex flex-col items-center gap-1 text-[#9E9082] p-4 text-center">
+              <ImageIcon className="w-6 h-6 opacity-60" />
+              <span className="text-xs">暂无图片数据</span>
+            </div>
           )}
         </div>
       </div>

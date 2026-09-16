@@ -8,6 +8,8 @@ import {
   Sparkles,
   Layers,
   ChevronDown,
+  Settings,
+  Image as ImageIcon,
 } from 'lucide-react';
 import { Notebook, ContentItem, MediaRecord } from '../types';
 import {
@@ -26,18 +28,24 @@ import { AddContentModal } from './modals/AddContentModal';
 import { ImageViewerModal } from './modals/ImageViewerModal';
 import { VideoPlayerModal } from './modals/VideoPlayerModal';
 import { ConfirmDialog } from './modals/ConfirmDialog';
+import { PaperStyle, AppSettings } from '../types';
+import { PAPER_PATTERNS } from '../utils/settings';
 
 interface NotebookViewProps {
   notebook: Notebook;
+  settings: AppSettings;
   onBack: () => void;
   onUpdateNotebook: (updated: Notebook) => void;
+  onOpenSettings: () => void;
   showToast: (text: string, type?: 'error' | 'success' | 'info') => void;
 }
 
 export const NotebookView: React.FC<NotebookViewProps> = ({
   notebook,
+  settings,
   onBack,
   onUpdateNotebook,
+  onOpenSettings,
   showToast,
 }) => {
   const [items, setItems] = useState<ContentItem[]>([]);
@@ -53,10 +61,13 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
   const [isRenaming, setIsRenaming] = useState(false);
   const [titleDraft, setTitleDraft] = useState(notebook.title);
 
-  // Paper pattern: dots, grid, lines, blank
-  const [paperPattern, setPaperPattern] = useState<'dots' | 'grid' | 'lines' | 'blank'>(
-    notebook.paperPattern || 'dots'
+  // Paper pattern: dots, grid, lines, blank, craft, textured
+  const [paperPattern, setPaperPattern] = useState<PaperStyle>(
+    notebook.paperPattern || settings.defaultPaperPattern || 'dots'
   );
+
+  // Drag-and-drop file upload state onto paper canvas
+  const [isDraggingFile, setIsDraggingFile] = useState(false);
 
   // Canvas layout measurement
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -112,8 +123,32 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
     return () => window.removeEventListener('resize', updateWidth);
   }, []);
 
+  // Global paste handler for pasting screenshots or copied images
+  useEffect(() => {
+    const handlePaste = async (e: ClipboardEvent) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        if (item.type.startsWith('image/')) {
+          const file = item.getAsFile();
+          if (file) {
+            e.preventDefault();
+            showToast('正在贴入剪贴板中的图片...', 'info');
+            await handleAddImage(file);
+            return;
+          }
+        }
+      }
+    };
+
+    window.addEventListener('paste', handlePaste);
+    return () => window.removeEventListener('paste', handlePaste);
+  }, [notebook.id]);
+
   // Update paper pattern
-  const handlePatternChange = async (pattern: 'dots' | 'grid' | 'lines' | 'blank') => {
+  const handlePatternChange = async (pattern: PaperStyle) => {
     setPaperPattern(pattern);
     const updated = { ...notebook, paperPattern: pattern, updatedAt: Date.now() };
     await saveNotebook(updated);
@@ -409,8 +444,16 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
     const maxX = Math.max(minX, canvasWidth - itemWidth - 8);
     const minY = 12;
 
-    const newX = Math.max(minX, Math.min(maxX, initialItemX + deltaX));
-    const newY = Math.max(minY, initialItemY + deltaY);
+    let targetX = initialItemX + deltaX;
+    let targetY = initialItemY + deltaY;
+
+    if (settings.snapToGrid) {
+      targetX = Math.round(targetX / 12) * 12;
+      targetY = Math.round(targetY / 12) * 12;
+    }
+
+    const newX = Math.max(minX, Math.min(maxX, targetX));
+    const newY = Math.max(minY, targetY);
 
     setItems((prev) =>
       prev.map((it) => (it.id === itemId ? { ...it, x: newX, y: newY } : it))
@@ -438,21 +481,29 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
     }
   };
 
-  const paperPatternClasses = {
+  const paperPatternClass = {
     dots: 'paper-pattern-dots',
     grid: 'paper-pattern-grid',
     lines: 'paper-pattern-lines',
     blank: 'paper-pattern-blank',
-  }[paperPattern];
+    craft: 'paper-pattern-craft',
+    textured: 'paper-pattern-textured',
+  }[paperPattern] || 'paper-pattern-dots';
+
+  const paperCornerClass = {
+    rounded: 'paper-style-rounded',
+    sharp: 'paper-style-sharp',
+    stamp: 'paper-style-stamp',
+  }[settings.paperCornerStyle] || 'paper-style-rounded';
 
   return (
     <div
-      className="min-h-screen flex flex-col bg-[#EFE9DF] text-[#2D2721] overflow-x-hidden"
+      className="min-h-screen flex flex-col overflow-x-hidden"
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
       onPointerCancel={handlePointerUp}
     >
-      {/* Top Navigation Bar: Clean, warm paper journal feel, no complex clutter */}
+      {/* Top Navigation Bar: Clean, warm paper journal feel */}
       <header className="sticky top-0 z-40 bg-[#FAF7F2]/95 backdrop-blur-md border-b border-[#E5DFD5] px-3 sm:px-6 py-2.5 shadow-xs">
         <div className="max-w-5xl mx-auto flex items-center justify-between gap-2">
           {/* Left: Return & Title */}
@@ -483,35 +534,41 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
             </div>
           </div>
 
-          {/* Right: Paper Pattern Toggle & + Add Content */}
+          {/* Right: Paper Pattern Toggle & Settings & + Add Content */}
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-            {/* Paper pattern selector dropdown/pills */}
-            <div className="hidden sm:flex items-center bg-[#EFE9E0] p-0.5 rounded-xl border border-[#E0D7CC] text-xs">
-              {(['dots', 'grid', 'lines', 'blank'] as const).map((pat) => (
-                <button
-                  key={pat}
-                  type="button"
-                  onClick={() => handlePatternChange(pat)}
-                  className={`px-2.5 py-1 rounded-lg font-medium transition-all ${
-                    paperPattern === pat
-                      ? 'bg-white text-[#2D2721] shadow-xs'
-                      : 'text-[#7D7062] hover:text-[#2D2721]'
-                  }`}
-                >
-                  {pat === 'dots' && '点阵'}
-                  {pat === 'grid' && '方格'}
-                  {pat === 'lines' && '横线'}
-                  {pat === 'blank' && '空白'}
-                </button>
-              ))}
+            {/* Paper pattern selector: quick compact selector */}
+            <div className="flex items-center bg-[#EFE9E0] p-0.5 rounded-xl border border-[#E0D7CC] text-xs">
+              <select
+                value={paperPattern}
+                onChange={(e) => handlePatternChange(e.target.value as PaperStyle)}
+                className="bg-transparent text-xs font-medium text-[#4A3F35] px-2 py-1 rounded-lg outline-none cursor-pointer"
+                title="切换当前手账纸张样式"
+              >
+                {PAPER_PATTERNS.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
             </div>
+
+            {/* Settings button */}
+            <button
+              type="button"
+              id="btn-notebook-settings"
+              onClick={onOpenSettings}
+              className="p-2 rounded-xl bg-white/80 hover:bg-white border border-[#DDD4C7] text-[#4A3F35] transition-all active:scale-95 shadow-2xs"
+              title="手账设置与视觉定制"
+            >
+              <Settings className="w-4 h-4 text-[#7D6F61]" />
+            </button>
 
             {/* "+ 添加" Button: Primary action */}
             <button
               type="button"
               id="btn-add-scrap-content"
               onClick={() => setIsAddModalOpen(true)}
-              className="flex items-center gap-1.5 px-3.5 sm:px-4 py-2 rounded-xl bg-[#4A3F35] hover:bg-[#382F26] text-[#FAF8F5] text-xs sm:text-sm font-medium transition-all active:scale-95 shadow-sm"
+              className="flex items-center gap-1.5 px-3 sm:px-4 py-2 rounded-xl bg-[#4A3F35] hover:bg-[#382F26] text-[#FAF8F5] text-xs sm:text-sm font-medium transition-all active:scale-95 shadow-sm"
             >
               <Plus className="w-4 h-4" />
               <span>添加内容</span>
@@ -526,9 +583,45 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
         <div
           ref={canvasRef}
           id="scrapbook-paper-canvas"
+          onDragOver={(e) => {
+            e.preventDefault();
+            setIsDraggingFile(true);
+          }}
+          onDragLeave={(e) => {
+            // Only deactivate if leaving the container
+            if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+              setIsDraggingFile(false);
+            }
+          }}
+          onDrop={async (e) => {
+            e.preventDefault();
+            setIsDraggingFile(false);
+            const files = Array.from(e.dataTransfer.files) as File[];
+            if (files.length === 0) return;
+
+            for (const file of files) {
+              if (file.type.startsWith('image/')) {
+                await handleAddImage(file);
+              } else if (file.type.startsWith('video/')) {
+                await handleAddVideo(file);
+              } else {
+                showToast(`不支持的文件类型: ${file.name}`, 'error');
+              }
+            }
+          }}
           style={{ minHeight: `${calculateCanvasHeight()}px` }}
-          className={`relative w-full rounded-2xl sm:rounded-3xl border border-[#DFD8CC] shadow-[0_10px_35px_rgba(60,45,35,0.08)] overflow-hidden transition-all ${paperPatternClasses}`}
+          className={`relative w-full border border-[#DFD8CC] shadow-[0_10px_35px_rgba(60,45,35,0.08)] overflow-hidden transition-all ${paperCornerClass} ${paperPatternClass}`}
         >
+          {/* Drag file dropzone overlay */}
+          {isDraggingFile && (
+            <div className="absolute inset-0 z-50 bg-[#8C7A6B]/15 backdrop-blur-[2px] border-2 border-dashed border-[#8C7A6B] rounded-2xl sm:rounded-3xl flex items-center justify-center pointer-events-none transition-all animate-fade-in">
+              <div className="bg-[#FAF7F2] px-6 py-4 rounded-xl shadow-lg border border-[#E6E0D6] flex items-center gap-3 text-[#4A3F35]">
+                <ImageIcon className="w-6 h-6 text-[#8C7A6B]" />
+                <span className="font-serif font-medium text-base">松开鼠标即可贴入照片或视频</span>
+              </div>
+            </div>
+          )}
+
           {/* Subtle paper binder / margin left line on desktop */}
           <div className="hidden sm:block absolute left-8 top-0 bottom-0 w-[1px] bg-[#E8DDD0] pointer-events-none" />
 

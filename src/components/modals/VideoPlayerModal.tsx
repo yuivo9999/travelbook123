@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { X, Loader2, Play, Volume2, AlertCircle } from 'lucide-react';
+import { X, Loader2, AlertCircle } from 'lucide-react';
 import { getMedia } from '../../db/indexedDB';
+import { createSafeBlobUrl } from '../../utils/media';
 
 interface VideoPlayerModalProps {
   isOpen: boolean;
@@ -42,9 +43,13 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
         }
 
         if (isMounted) {
-          activeUrl = URL.createObjectURL(media.blob);
-          setVideoUrl(activeUrl);
-          setLoading(false);
+          activeUrl = createSafeBlobUrl(media.blob, media.mimeType || 'video/mp4');
+          if (activeUrl) {
+            setVideoUrl(activeUrl);
+            setLoading(false);
+          } else {
+            throw new Error('无法解析视频二进制数据');
+          }
         }
       } catch (err) {
         if (isMounted) {
@@ -58,7 +63,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
 
     return () => {
       isMounted = false;
-      if (activeUrl) {
+      if (activeUrl && activeUrl.startsWith('blob:')) {
         URL.revokeObjectURL(activeUrl);
       }
     };

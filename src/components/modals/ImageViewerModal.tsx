@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { X, Loader2 } from 'lucide-react';
 import { getMedia } from '../../db/indexedDB';
+import { createSafeBlobUrl } from '../../utils/media';
 
 interface ImageViewerModalProps {
   isOpen: boolean;
@@ -38,10 +39,13 @@ export const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
         if (mediaId) {
           const media = await getMedia(mediaId);
           if (media && isMounted) {
-            activeUrl = URL.createObjectURL(media.blob);
-            setImageUrl(activeUrl);
-            setLoading(false);
-            return;
+            const blobToUse = media.blob || media.thumbnailBlob;
+            activeUrl = createSafeBlobUrl(blobToUse, media.mimeType || 'image/jpeg');
+            if (activeUrl) {
+              setImageUrl(activeUrl);
+              setLoading(false);
+              return;
+            }
           }
         }
 
@@ -64,7 +68,7 @@ export const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
 
     return () => {
       isMounted = false;
-      if (activeUrl) {
+      if (activeUrl && activeUrl.startsWith('blob:')) {
         URL.revokeObjectURL(activeUrl);
       }
     };

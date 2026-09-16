@@ -1,8 +1,8 @@
 /**
  * Media processing utilities for digital scrapbook:
- * - Image thumbnail generation
- * - Video thumbnail generation via HTML5 video + canvas
- * - Blob URL caching and memory management
+ * - Image thumbnail generation with multi-format fallback (WebP -> JPEG -> PNG -> original)
+ * - Video thumbnail generation via HTML5 video + canvas with preload 'auto' and frame capture
+ * - Safe Blob URL creation and conversion helpers
  */
 
 export interface ImageProcessResult {
@@ -18,10 +18,70 @@ export interface VideoProcessResult {
   height: number;
 }
 
+/**
+ * Safely convert any raw stored data into a real Blob instance
+ */
+export function ensureBlob(raw: unknown, mimeType = 'application/octet-stream'): Blob | null {
+  if (!raw) return null;
+  if (raw instanceof Blob) return raw;
+  if (raw instanceof ArrayBuffer) return new Blob([raw], { type: mimeType });
+  if (ArrayBuffer.isView(raw)) return new Blob([raw.buffer], { type: mimeType });
+  if (typeof raw === 'string') {
+    if (raw.startsWith('data:')) {
+      try {
+        const parts = raw.split(',');
+        const mimeMatch = parts[0].match(/:(.*?);/);
+        const mime = mimeMatch ? mimeMatch[1] : mimeType;
+        const bstr = atob(parts[1]);
+        let n = bstr.length;
+        const u8arr = new Uint8Array(n);
+        while (n--) {
+          u8arr[n] = bstr.charCodeAt(n);
+        }
+        return new Blob([u8arr], { type: mime });
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  }
+  try {
+    return new Blob([raw as BlobPart], { type: mimeType });
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Create a safe Object URL from a Blob or raw data
+ */
+export function createSafeBlobUrl(raw: unknown, mimeType?: string): string | null {
+  if (!raw) return null;
+  if (typeof raw === 'string' && (raw.startsWith('blob:') || raw.startsWith('data:') || raw.startsWith('http'))) {
+    return raw;
+  }
+  const blob = ensureBlob(raw, mimeType);
+  if (!blob) return null;
+  try {
+    return URL.createObjectURL(blob);
+  } catch (err) {
+    console.error('Failed to create object URL', err);
+    return null;
+  }
+}
+
 export async function processImageFile(file: File | Blob, maxWidth = 640): Promise<ImageProcessResult> {
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve) => {
+    const rawBlob = ensureBlob(file, (file as File).type || 'image/jpeg') || file;
+    let objectUrl = '';
+    try {
+      objectUrl = URL.createObjectURL(rawBlob);
+    } catch {
+      resolve({ thumbnailBlob: rawBlob as Blob, width: 400, height: 300 });
+      return;
+    }
+
     const img = new Image();
-    const objectUrl = URL.createObjectURL(file);
 
     img.onload = () => {
       URL.revokeObjectURL(objectUrl);
@@ -44,22 +104,31 @@ export async function processImageFile(file: File | Blob, maxWidth = 640): Promi
 
       const ctx = canvas.getContext('2d');
       if (!ctx) {
-        // Fallback to original blob
-        resolve({ thumbnailBlob: file, width: originalWidth, height: originalHeight });
+        resolve({ thumbnailBlob: rawBlob as Blob, width: originalWidth, height: originalHeight });
         return;
       }
 
-      // High quality smoothing
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = 'high';
       ctx.drawImage(img, 0, 0, targetWidth, targetHeight);
 
+      // Try webp first, then jpeg
       canvas.toBlob(
-        (blob) => {
-          if (blob) {
-            resolve({ thumbnailBlob: blob, width: originalWidth, height: originalHeight });
+        (webpBlob) => {
+          if (webpBlob && webpBlob.size > 0) {
+            resolve({ thumbnailBlob: webpBlob, width: originalWidth, height: originalHeight });
           } else {
-            resolve({ thumbnailBlob: file, width: originalWidth, height: originalHeight });
+            canvas.toBlob(
+              (jpegBlob) => {
+                if (jpegBlob && jpegBlob.size > 0) {
+                  resolve({ thumbnailBlob: jpegBlob, width: originalWidth, height: originalHeight });
+                } else {
+                  resolve({ thumbnailBlob: rawBlob as Blob, width: originalWidth, height: originalHeight });
+                }
+              },
+              'image/jpeg',
+              0.88
+            );
           }
         },
         'image/webp',
@@ -69,7 +138,8 @@ export async function processImageFile(file: File | Blob, maxWidth = 640): Promi
 
     img.onerror = () => {
       URL.revokeObjectURL(objectUrl);
-      reject(new Error('无法解析该图片文件，格式可能不被支持'));
+      // Graceful fallback: do not throw or reject, preserve the original image!
+      resolve({ thumbnailBlob: rawBlob as Blob, width: 400, height: 300 });
     };
 
     img.src = objectUrl;
@@ -78,91 +148,114 @@ export async function processImageFile(file: File | Blob, maxWidth = 640): Promi
 
 export async function processVideoFile(file: File | Blob): Promise<VideoProcessResult> {
   return new Promise((resolve) => {
-    const video = document.createElement('video');
-    const objectUrl = URL.createObjectURL(file);
+    const rawBlob = ensureBlob(file, (file as File).type || 'video/mp4') || file;
+    let objectUrl = '';
+    try {
+      objectUrl = URL.createObjectURL(rawBlob);
+    } catch {
+      resolve({ thumbnailBlob: null, duration: 0, width: 320, height: 240 });
+      return;
+    }
 
+    const video = document.createElement('video');
     video.muted = true;
     video.playsInline = true;
-    video.preload = 'metadata';
+    video.preload = 'auto'; // Must be 'auto' to ensure video frames buffer for seek
     video.src = objectUrl;
 
     let timeoutId: number;
+    let isResolved = false;
 
     const cleanup = () => {
+      if (isResolved) return;
+      isResolved = true;
       clearTimeout(timeoutId);
       URL.revokeObjectURL(objectUrl);
       video.removeAttribute('src');
       video.load();
     };
 
-    // Timeout safety: if video fails to seek or render within 5s, resolve gracefully without crash
+    const captureCurrentFrame = (width: number, height: number): Blob | null => {
+      try {
+        const maxWidth = 540;
+        let targetWidth = width;
+        let targetHeight = height;
+
+        if (targetWidth > maxWidth) {
+          const ratio = maxWidth / targetWidth;
+          targetWidth = maxWidth;
+          targetHeight = Math.round(height * ratio);
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = targetWidth;
+        canvas.height = targetHeight;
+
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(video, 0, 0, targetWidth, targetHeight);
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+          const blob = ensureBlob(dataUrl, 'image/jpeg');
+          return blob;
+        }
+      } catch (err) {
+        console.warn('Canvas frame capture failed', err);
+      }
+      return null;
+    };
+
+    // 4s timeout fallback
     timeoutId = window.setTimeout(() => {
+      if (isResolved) return;
+      const duration = isFinite(video.duration) ? video.duration : 0;
+      const originalWidth = video.videoWidth || 320;
+      const originalHeight = video.videoHeight || 240;
+      const frameBlob = captureCurrentFrame(originalWidth, originalHeight);
       cleanup();
       resolve({
-        thumbnailBlob: null,
-        duration: 0,
-        width: 320,
-        height: 240,
+        thumbnailBlob: frameBlob,
+        duration,
+        width: originalWidth,
+        height: originalHeight,
       });
-    }, 5000);
+    }, 4000);
 
-    video.onloadedmetadata = () => {
+    const onDataReady = () => {
       const duration = isFinite(video.duration) ? video.duration : 0;
       const originalWidth = video.videoWidth || 320;
       const originalHeight = video.videoHeight || 240;
 
-      // Seek to 0.5s or duration/4 to capture an informative frame
-      const seekTime = duration > 1 ? 0.5 : Math.max(0.1, duration / 2);
+      // Try seeking to 0.1s or 0.5s for poster
+      const seekTime = duration > 1 ? 0.3 : 0.05;
 
-      video.currentTime = seekTime;
-
-      video.onseeked = () => {
-        try {
-          const maxWidth = 540;
-          let targetWidth = originalWidth;
-          let targetHeight = originalHeight;
-
-          if (targetWidth > maxWidth) {
-            const ratio = maxWidth / targetWidth;
-            targetWidth = maxWidth;
-            targetHeight = Math.round(originalHeight * ratio);
-          }
-
-          const canvas = document.createElement('canvas');
-          canvas.width = targetWidth;
-          canvas.height = targetHeight;
-
-          const ctx = canvas.getContext('2d');
-          if (ctx) {
-            ctx.drawImage(video, 0, 0, targetWidth, targetHeight);
-            canvas.toBlob(
-              (blob) => {
-                cleanup();
-                resolve({
-                  thumbnailBlob: blob,
-                  duration,
-                  width: originalWidth,
-                  height: originalHeight,
-                });
-              },
-              'image/jpeg',
-              0.85
-            );
-            return;
-          }
-        } catch {
-          // Canvas cross-origin or decode exception
-        }
-
+      const handleSeeked = () => {
+        const frameBlob = captureCurrentFrame(originalWidth, originalHeight);
         cleanup();
         resolve({
-          thumbnailBlob: null,
+          thumbnailBlob: frameBlob,
           duration,
           width: originalWidth,
           height: originalHeight,
         });
       };
+
+      video.addEventListener('seeked', handleSeeked, { once: true });
+
+      try {
+        video.currentTime = seekTime;
+      } catch {
+        const frameBlob = captureCurrentFrame(originalWidth, originalHeight);
+        cleanup();
+        resolve({
+          thumbnailBlob: frameBlob,
+          duration,
+          width: originalWidth,
+          height: originalHeight,
+        });
+      }
     };
+
+    video.addEventListener('loadeddata', onDataReady, { once: true });
 
     video.onerror = () => {
       cleanup();
