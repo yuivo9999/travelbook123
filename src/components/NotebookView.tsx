@@ -587,6 +587,23 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
     }
   };
 
+  // Bring any clicked or touched item to the front immediately
+  const handleBringToFront = useCallback(
+    async (itemId: string) => {
+      const target = items.find((i) => i.id === itemId);
+      if (!target) return;
+      const newZ = ++maxZIndexRef.current;
+      const updated: ContentItem = { ...target, zIndex: newZ, updatedAt: Date.now() };
+      setItems((prev) => prev.map((it) => (it.id === itemId ? updated : it)));
+      try {
+        await saveItem(updated);
+      } catch (err) {
+        console.error('Failed to save zIndex', err);
+      }
+    },
+    [items]
+  );
+
   // ---------------- Drag, Rotate & Resize logic ----------------
   // Supports pointer events with pointer capture for reliable mobile touch + desktop mouse.
   const handleDragStart = (e: React.PointerEvent, item: ContentItem) => {
@@ -1204,6 +1221,7 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
                   onRotateStart={handleRotateStart}
                   onResizeStart={handleResizeStart}
                   onResetTransform={handleResetTransform}
+                  onBringToFront={handleBringToFront}
                   onUpdateText={handleUpdateText}
                   onDelete={(id) => setItemToDelete({ id })}
                 />
@@ -1220,6 +1238,7 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
                   onRotateStart={handleRotateStart}
                   onResizeStart={handleResizeStart}
                   onResetTransform={handleResetTransform}
+                  onBringToFront={handleBringToFront}
                   onViewImage={(mediaId) => setPreviewImageId(mediaId || null)}
                   onDelete={(id, mediaId) => setItemToDelete({ id, mediaId })}
                 />
@@ -1236,6 +1255,7 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
                   onRotateStart={handleRotateStart}
                   onResizeStart={handleResizeStart}
                   onResetTransform={handleResetTransform}
+                  onBringToFront={handleBringToFront}
                   onPlayVideo={(mediaId) => setPreviewVideoId(mediaId || null)}
                   onDelete={(id, mediaId) => setItemToDelete({ id, mediaId })}
                 />

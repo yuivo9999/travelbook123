@@ -45,31 +45,11 @@ export const AddContentModal: React.FC<AddContentModalProps> = ({
     handleClose();
   };
 
-  const handlePickImages = async () => {
-    try {
-      const picked = await pickFilesViaPicker('image');
-      if (picked.length > 0) {
-        picked.forEach((p) => onSelectImage(p.file, p.handle));
-        handleClose();
-        return;
-      }
-    } catch {
-      // fallback
-    }
+  const handlePickImages = () => {
     imageInputRef.current?.click();
   };
 
-  const handlePickVideos = async () => {
-    try {
-      const picked = await pickFilesViaPicker('video');
-      if (picked.length > 0) {
-        picked.forEach((p) => onSelectVideo(p.file, p.handle));
-        handleClose();
-        return;
-      }
-    } catch {
-      // fallback
-    }
+  const handlePickVideos = () => {
     videoInputRef.current?.click();
   };
 

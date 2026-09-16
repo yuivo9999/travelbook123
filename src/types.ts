@@ -8,7 +8,18 @@ export type BackgroundSkin =
   | 'matcha-tea'
   | 'sakura-blush';
 
-export type PaperStyle = 'dots' | 'grid' | 'lines' | 'blank' | 'craft' | 'textured';
+export type PaperStyle =
+  | 'beige-grid'
+  | 'blue-gray-coords'
+  | 'staff-music'
+  | 'sketch-paper'
+  | 'map-grid'
+  | 'dots'
+  | 'grid'
+  | 'lines'
+  | 'blank'
+  | 'craft'
+  | 'textured';
 
 export type CoverType = 'none' | 'text' | 'image';
 

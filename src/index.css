@@ -21,6 +21,58 @@
 }
 
 /* Paper background patterns */
+.paper-pattern-beige-grid {
+  background-color: #F9F3E5;
+  background-image: 
+    linear-gradient(to right, rgba(185, 150, 100, 0.22) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(185, 150, 100, 0.22) 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+
+.paper-pattern-blue-gray-coords {
+  background-color: #EDF1F5;
+  background-image: 
+    linear-gradient(to right, rgba(70, 100, 130, 0.24) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(70, 100, 130, 0.24) 1px, transparent 1px),
+    linear-gradient(to right, rgba(70, 100, 130, 0.08) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(70, 100, 130, 0.08) 1px, transparent 1px);
+  background-size: 80px 80px, 80px 80px, 16px 16px, 16px 16px;
+}
+
+.paper-pattern-staff-music {
+  background-color: #FAF8F2;
+  background-image: 
+    linear-gradient(to bottom, 
+      transparent 0px, transparent 16px,
+      rgba(110, 90, 75, 0.32) 16px, transparent 17px,
+      transparent 23px, rgba(110, 90, 75, 0.32) 23px, transparent 24px,
+      transparent 30px, rgba(110, 90, 75, 0.32) 30px, transparent 31px,
+      transparent 37px, rgba(110, 90, 75, 0.32) 37px, transparent 38px,
+      transparent 44px, rgba(110, 90, 75, 0.32) 44px, transparent 45px,
+      transparent 76px
+    );
+  background-size: 100% 76px;
+}
+
+.paper-pattern-sketch-paper {
+  background-color: #F4EFE6;
+  background-image: 
+    radial-gradient(rgba(100, 85, 70, 0.18) 0.8px, transparent 0.8px),
+    radial-gradient(rgba(150, 125, 95, 0.12) 1.2px, transparent 1.2px),
+    linear-gradient(45deg, rgba(120, 100, 80, 0.02) 25%, transparent 25%),
+    linear-gradient(-45deg, rgba(120, 100, 80, 0.02) 25%, transparent 25%);
+  background-size: 8px 8px, 16px 16px, 6px 6px, 6px 6px;
+}
+
+.paper-pattern-map-grid {
+  background-color: #F3EBDD;
+  background-image: 
+    linear-gradient(to right, rgba(145, 105, 65, 0.22) 1.5px, transparent 1.5px),
+    linear-gradient(to bottom, rgba(145, 105, 65, 0.22) 1.5px, transparent 1.5px),
+    radial-gradient(circle, rgba(145, 105, 65, 0.45) 1.5px, transparent 1.5px);
+  background-size: 50px 50px, 50px 50px, 50px 50px;
+}
+
 .paper-pattern-dots {
   background-color: #FAF7F2;
   background-image: radial-gradient(var(--paper-dot) 1.2px, transparent 1.2px);

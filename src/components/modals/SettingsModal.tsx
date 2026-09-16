@@ -277,8 +277,57 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           {/* TAB 1: VISUAL & SKINS */}
           {activeTab === 'visual' && (
             <div className="space-y-6">
-              {/* Section 1: Background Skin */}
+              {/* Section 1: Default Paper Pattern (Prioritized First) */}
               <div>
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="font-serif font-bold text-sm text-[#382F26] flex items-center gap-1.5">
+                    <FileText className="w-4 h-4 text-[#8C7A6B]" />
+                    <span>手账本纸张样式</span>
+                  </h4>
+                  <span className="text-[11px] text-[#9E9082]">每本手账内亦可单独切换</span>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                  {PAPER_PATTERNS.map((pattern) => {
+                    const isSelected = settings.defaultPaperPattern === pattern.id;
+                    return (
+                      <button
+                        key={pattern.id}
+                        type="button"
+                        onClick={() => handlePatternSelect(pattern.id)}
+                        className={`p-3 rounded-xl border text-left transition-all relative flex flex-col gap-2 ${
+                          isSelected
+                            ? 'border-[#4A3F35] shadow-xs ring-1 ring-[#4A3F35] bg-white'
+                            : 'border-[#E6DFD3] hover:border-[#C4B9A9] bg-[#FFFFFF]/70'
+                        }`}
+                      >
+                        {/* Miniature pattern preview */}
+                        <div
+                          className={`w-full h-10 rounded-lg border border-black/10 overflow-hidden ${pattern.cssClass} flex items-center justify-center`}
+                        >
+                          <span className="text-[9px] text-[#8C7E70] bg-[#FAF7F2]/90 px-1 py-0.5 rounded shadow-2xs font-medium">
+                            {pattern.name}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <div className="text-xs font-medium text-[#382F26]">{pattern.name}</div>
+                            <div className="text-[10px] text-[#8C7E70] leading-tight mt-0.5">{pattern.desc}</div>
+                          </div>
+                          {isSelected && (
+                            <span className="w-3.5 h-3.5 shrink-0 rounded-full bg-[#4A3F35] text-[#FAF7F2] flex items-center justify-center">
+                              <Check className="w-2 h-2 stroke-[3]" />
+                            </span>
+                          )}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Section 2: Background Skin */}
+              <div className="pt-2 border-t border-[#EAE3D6]">
                 <div className="flex items-center justify-between mb-3">
                   <h4 className="font-serif font-bold text-sm text-[#382F26] flex items-center gap-1.5">
                     <Sparkles className="w-4 h-4 text-[#8C7A6B]" />
@@ -297,7 +346,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         onClick={() => handleSkinSelect(skin.id)}
                         className={`p-3 rounded-xl border text-left transition-all relative flex flex-col gap-1.5 ${
                           isSelected
-                            ? 'border-[#4A3F35] shadow-xs ring-1 ring-[#4A3F35]'
+                            ? 'border-[#4A3F35] shadow-xs ring-1 ring-[#4A3F35] bg-white'
                             : 'border-[#E6DFD3] hover:border-[#C4B9A9] bg-[#FFFFFF]/70'
                         }`}
                       >
@@ -315,52 +364,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         <div>
                           <div className="font-medium text-xs text-[#382F26]">{skin.name}</div>
                           <div className="text-[10px] text-[#8C7E70] leading-tight mt-0.5">{skin.desc}</div>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Section 2: Default Paper Pattern */}
-              <div>
-                <div className="flex items-center justify-between mb-3">
-                  <h4 className="font-serif font-bold text-sm text-[#382F26] flex items-center gap-1.5">
-                    <FileText className="w-4 h-4 text-[#8C7A6B]" />
-                    <span>默认手账纸张样式</span>
-                  </h4>
-                  <span className="text-[11px] text-[#9E9082]">每本手账内亦可单独切换</span>
-                </div>
-
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
-                  {PAPER_PATTERNS.map((pattern) => {
-                    const isSelected = settings.defaultPaperPattern === pattern.id;
-                    return (
-                      <button
-                        key={pattern.id}
-                        type="button"
-                        onClick={() => handlePatternSelect(pattern.id)}
-                        className={`p-3 rounded-xl border text-left transition-all relative flex flex-col gap-2 ${
-                          isSelected
-                            ? 'border-[#4A3F35] shadow-xs ring-1 ring-[#4A3F35]'
-                            : 'border-[#E6DFD3] hover:border-[#C4B9A9] bg-[#FFFFFF]/70'
-                        }`}
-                      >
-                        {/* Miniature pattern preview */}
-                        <div
-                          className={`w-full h-10 rounded-lg border border-black/10 overflow-hidden ${pattern.cssClass} flex items-center justify-center`}
-                        >
-                          <span className="text-[9px] text-[#8C7E70] bg-[#FAF7F2]/85 px-1 rounded">
-                            {pattern.name}
-                          </span>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-medium text-[#382F26]">{pattern.name}</span>
-                          {isSelected && (
-                            <span className="w-3.5 h-3.5 rounded-full bg-[#4A3F35] text-[#FAF7F2] flex items-center justify-center">
-                              <Check className="w-2 h-2 stroke-[3]" />
-                            </span>
-                          )}
                         </div>
                       </button>
                     );

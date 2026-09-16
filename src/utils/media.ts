@@ -166,21 +166,88 @@ export async function processImageFile(file: File | Blob, maxWidth = 640): Promi
   });
 }
 
+export function createPlaceholderVideoThumbnail(title?: string, duration?: number): Blob {
+  const canvas = document.createElement('canvas');
+  canvas.width = 480;
+  canvas.height = 320;
+  const ctx = canvas.getContext('2d');
+  if (ctx) {
+    // Rich vintage dark film canvas
+    const gradient = ctx.createLinearGradient(0, 0, 480, 320);
+    gradient.addColorStop(0, '#24201D');
+    gradient.addColorStop(1, '#151312');
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, 480, 320);
+
+    // Film strip borders (top & bottom sprocket holes)
+    ctx.fillStyle = '#3A322C';
+    ctx.fillRect(0, 0, 480, 24);
+    ctx.fillRect(0, 296, 480, 24);
+
+    ctx.fillStyle = '#151312';
+    for (let i = 12; i < 480; i += 32) {
+      ctx.fillRect(i, 6, 16, 12);
+      ctx.fillRect(i, 302, 16, 12);
+    }
+
+    // Play icon badge in center
+    ctx.beginPath();
+    ctx.arc(240, 160, 38, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(235, 220, 200, 0.22)';
+    ctx.fill();
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = '#D6C5B0';
+    ctx.stroke();
+
+    // Play triangle
+    ctx.beginPath();
+    ctx.moveTo(232, 142);
+    ctx.lineTo(256, 160);
+    ctx.lineTo(232, 178);
+    ctx.closePath();
+    ctx.fillStyle = '#FAF7F2';
+    ctx.fill();
+
+    // Optional duration or title stamp at bottom
+    ctx.font = '13px sans-serif';
+    ctx.fillStyle = '#B4A698';
+    ctx.textAlign = 'center';
+    const label = title || '视频剪辑';
+    ctx.fillText(label.length > 28 ? label.slice(0, 26) + '...' : label, 240, 235);
+
+    if (duration && duration > 0) {
+      ctx.font = '11px sans-serif';
+      ctx.fillStyle = '#8C7E70';
+      ctx.fillText(formatDuration(duration), 240, 255);
+    }
+
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+    const blob = ensureBlob(dataUrl, 'image/jpeg');
+    if (blob) return blob;
+  }
+
+  // Pure binary 1x1 fallback if canvas context is unavailable
+  return new Blob([''], { type: 'image/jpeg' });
+}
+
 export async function processVideoFile(file: File | Blob): Promise<VideoProcessResult> {
   return new Promise((resolve) => {
+    const fileName = (file as File).name || 'video.mp4';
     const rawBlob = ensureBlob(file, (file as File).type || 'video/mp4') || file;
     let objectUrl = '';
     try {
       objectUrl = URL.createObjectURL(rawBlob);
     } catch {
-      resolve({ thumbnailBlob: null, duration: 0, width: 320, height: 240 });
+      const fallbackThumb = createPlaceholderVideoThumbnail(fileName);
+      resolve({ thumbnailBlob: fallbackThumb, duration: 0, width: 320, height: 240 });
       return;
     }
 
     const video = document.createElement('video');
     video.muted = true;
     video.playsInline = true;
-    video.preload = 'metadata'; // Fast metadata reading
+    video.preload = 'auto';
+    video.crossOrigin = 'anonymous';
     video.src = objectUrl;
 
     let timeoutId: number;
@@ -197,6 +264,10 @@ export async function processVideoFile(file: File | Blob): Promise<VideoProcessR
 
     const finish = (result: VideoProcessResult) => {
       cleanup();
+      // If thumbnail capture was null, always ensure a beautiful fallback thumbnail
+      if (!result.thumbnailBlob) {
+        result.thumbnailBlob = createPlaceholderVideoThumbnail(fileName, result.duration);
+      }
       resolve(result);
     };
 
@@ -229,7 +300,7 @@ export async function processVideoFile(file: File | Blob): Promise<VideoProcessR
       return null;
     };
 
-    // 1.5s timeout fallback: never keep user waiting long for video adding
+    // 1.2s timeout fallback: never keep user waiting long for video adding
     timeoutId = window.setTimeout(() => {
       if (isResolved) return;
       const duration = isFinite(video.duration) ? video.duration : 0;
@@ -239,12 +310,12 @@ export async function processVideoFile(file: File | Blob): Promise<VideoProcessR
         ? captureCurrentFrame(originalWidth, originalHeight)
         : null;
       finish({
-        thumbnailBlob: frameBlob,
+        thumbnailBlob: frameBlob || createPlaceholderVideoThumbnail(fileName, duration),
         duration,
         width: originalWidth,
         height: originalHeight,
       });
-    }, 1500);
+    }, 1200);
 
     const onDataReady = () => {
       const duration = isFinite(video.duration) ? video.duration : 0;
@@ -252,17 +323,16 @@ export async function processVideoFile(file: File | Blob): Promise<VideoProcessR
       const originalHeight = video.videoHeight || 240;
 
       if (originalWidth <= 0 || originalHeight <= 0) {
-        // Wait a tick or fallback
         return;
       }
 
-      // Try seeking to 0.1s for poster
+      // Seek slightly past 0s for good thumbnail frame
       const seekTime = duration > 1 ? 0.3 : 0.05;
 
       const handleSeeked = () => {
         const frameBlob = captureCurrentFrame(originalWidth, originalHeight);
         finish({
-          thumbnailBlob: frameBlob,
+          thumbnailBlob: frameBlob || createPlaceholderVideoThumbnail(fileName, duration),
           duration,
           width: originalWidth,
           height: originalHeight,
@@ -276,7 +346,7 @@ export async function processVideoFile(file: File | Blob): Promise<VideoProcessR
       } catch {
         const frameBlob = captureCurrentFrame(originalWidth, originalHeight);
         finish({
-          thumbnailBlob: frameBlob,
+          thumbnailBlob: frameBlob || createPlaceholderVideoThumbnail(fileName, duration),
           duration,
           width: originalWidth,
           height: originalHeight,
@@ -293,7 +363,7 @@ export async function processVideoFile(file: File | Blob): Promise<VideoProcessR
 
     video.onerror = () => {
       finish({
-        thumbnailBlob: null,
+        thumbnailBlob: createPlaceholderVideoThumbnail(fileName, 0),
         duration: 0,
         width: 320,
         height: 240,

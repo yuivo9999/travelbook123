@@ -18,6 +18,7 @@ interface TextItemProps {
   onRotateStart: (e: React.PointerEvent, item: ContentItem) => void;
   onResizeStart: (e: React.PointerEvent, item: ContentItem) => void;
   onResetTransform: (item: ContentItem) => void;
+  onBringToFront?: (id: string) => void;
   onUpdateText: (id: string, text: string) => void;
   onDelete: (id: string) => void;
 }
@@ -29,6 +30,7 @@ export const TextItem: React.FC<TextItemProps> = ({
   onRotateStart,
   onResizeStart,
   onResetTransform,
+  onBringToFront,
   onUpdateText,
   onDelete,
 }) => {
@@ -78,6 +80,9 @@ export const TextItem: React.FC<TextItemProps> = ({
         transform: `translate3d(${item.x}px, ${item.y}px, 0px) rotate(${item.rotation || 0}deg)`,
         width: `${effectiveWidth}px`,
         zIndex: item.zIndex,
+      }}
+      onPointerDownCapture={() => {
+        onBringToFront?.(item.id);
       }}
       className="absolute top-0 left-0 transition-shadow duration-150 group touch-auto select-none"
     >

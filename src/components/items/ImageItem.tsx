@@ -22,6 +22,7 @@ interface ImageItemProps {
   onRotateStart: (e: React.PointerEvent, item: ContentItem) => void;
   onResizeStart: (e: React.PointerEvent, item: ContentItem) => void;
   onResetTransform: (item: ContentItem) => void;
+  onBringToFront?: (id: string) => void;
   onViewImage: (mediaId?: string) => void;
   onDelete: (id: string, mediaId?: string) => void;
 }
@@ -33,6 +34,7 @@ export const ImageItem: React.FC<ImageItemProps> = ({
   onRotateStart,
   onResizeStart,
   onResetTransform,
+  onBringToFront,
   onViewImage,
   onDelete,
 }) => {
@@ -123,6 +125,9 @@ export const ImageItem: React.FC<ImageItemProps> = ({
         transform: `translate3d(${item.x}px, ${item.y}px, 0px) rotate(${item.rotation || 0}deg)`,
         width: `${effectiveWidth}px`,
         zIndex: item.zIndex,
+      }}
+      onPointerDownCapture={() => {
+        onBringToFront?.(item.id);
       }}
       className="absolute top-0 left-0 transition-shadow duration-150 group touch-auto select-none"
     >

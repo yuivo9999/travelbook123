@@ -23,6 +23,7 @@ interface VideoItemProps {
   onRotateStart: (e: React.PointerEvent, item: ContentItem) => void;
   onResizeStart: (e: React.PointerEvent, item: ContentItem) => void;
   onResetTransform: (item: ContentItem) => void;
+  onBringToFront?: (id: string) => void;
   onPlayVideo: (mediaId?: string) => void;
   onDelete: (id: string, mediaId?: string) => void;
 }
@@ -34,6 +35,7 @@ export const VideoItem: React.FC<VideoItemProps> = ({
   onRotateStart,
   onResizeStart,
   onResetTransform,
+  onBringToFront,
   onPlayVideo,
   onDelete,
 }) => {
@@ -119,6 +121,9 @@ export const VideoItem: React.FC<VideoItemProps> = ({
         transform: `translate3d(${item.x}px, ${item.y}px, 0px) rotate(${item.rotation || 0}deg)`,
         width: `${effectiveWidth}px`,
         zIndex: item.zIndex,
+      }}
+      onPointerDownCapture={() => {
+        onBringToFront?.(item.id);
       }}
       className="absolute top-0 left-0 transition-shadow duration-150 group touch-auto select-none"
     >

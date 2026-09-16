@@ -219,6 +219,36 @@ export interface PaperPatternConfig {
 
 export const PAPER_PATTERNS: PaperPatternConfig[] = [
   {
+    id: 'beige-grid',
+    name: '米黄方格',
+    desc: '暖调复古双线格，适合手账书写',
+    cssClass: 'paper-pattern-beige-grid',
+  },
+  {
+    id: 'blue-gray-coords',
+    name: '蓝灰坐标',
+    desc: '现代技术手绘与精密坐标刻度',
+    cssClass: 'paper-pattern-blue-gray-coords',
+  },
+  {
+    id: 'staff-music',
+    name: '五线谱纸',
+    desc: '浪漫五线乐谱手稿与旋律随笔',
+    cssClass: 'paper-pattern-staff-music',
+  },
+  {
+    id: 'sketch-paper',
+    name: '素描纸纹理',
+    desc: '艺术炭铅手绘颗粒粗粝冷压感',
+    cssClass: 'paper-pattern-sketch-paper',
+  },
+  {
+    id: 'map-grid',
+    name: '地图网格',
+    desc: '复古航海与地理经纬度网格',
+    cssClass: 'paper-pattern-map-grid',
+  },
+  {
     id: 'dots',
     name: '点阵纸',
     desc: '5mm 经典子弹手账点阵',
