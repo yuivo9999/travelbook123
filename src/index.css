@@ -1,0 +1,69 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --paper-bg: #FAF7F2;
+    --paper-line: rgba(180, 160, 140, 0.18);
+    --paper-dot: rgba(160, 140, 120, 0.25);
+    --scrap-shadow: 0 4px 18px -2px rgba(60, 45, 35, 0.12), 0 2px 6px -1px rgba(60, 45, 35, 0.08);
+    --scrap-hover: 0 10px 25px -4px rgba(60, 45, 35, 0.18), 0 4px 10px -2px rgba(60, 45, 35, 0.12);
+  }
+
+  body {
+    background-color: #F3EFEA;
+    color: #2D2721;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -webkit-tap-highlight-color: transparent;
+    user-select: text;
+    overflow-x: hidden;
+  }
+}
+
+/* Paper background patterns */
+.paper-pattern-dots {
+  background-color: #FAF7F2;
+  background-image: radial-gradient(var(--paper-dot) 1.2px, transparent 1.2px);
+  background-size: 20px 20px;
+}
+
+.paper-pattern-grid {
+  background-color: #FAF7F2;
+  background-image: 
+    linear-gradient(to right, var(--paper-line) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--paper-line) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+.paper-pattern-lines {
+  background-color: #FAF7F2;
+  background-image: linear-gradient(to bottom, transparent 31px, var(--paper-line) 32px);
+  background-size: 100% 32px;
+}
+
+.paper-pattern-blank {
+  background-color: #FAF7F2;
+}
+
+/* Scrapbook washi tape effect */
+.washi-tape-accent {
+  background: rgba(235, 218, 195, 0.85);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+  backdrop-filter: blur(1px);
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.03);
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(140, 120, 100, 0.25);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(140, 120, 100, 0.45);
+}
