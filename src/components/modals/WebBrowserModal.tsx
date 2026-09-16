@@ -38,7 +38,7 @@ export const WebBrowserModal: React.FC<WebBrowserModalProps> = ({
   const [resolvedEmbedUrl, setResolvedEmbedUrl] = useState<string | null>(null);
   const [resolvedPcUrl, setResolvedPcUrl] = useState<string | null>(null);
   const [isResolvingDouyin, setIsResolvingDouyin] = useState(false);
-  const [douyinPlayerMode, setDouyinPlayerMode] = useState<'open' | 'pc'>('open');
+  const [douyinPlayerMode, setDouyinPlayerMode] = useState<'pc' | 'open'>('pc');
   const videoRef = useRef<HTMLVideoElement>(null);
 
   const parsed = parseWebUrlInfo(url || '', title);
@@ -275,22 +275,11 @@ export const WebBrowserModal: React.FC<WebBrowserModalProps> = ({
                 )}
                 <span>
                   {isResolvingDouyin
-                    ? '正在智能解析抖音视频链接 & 拦截 APP 跳转...'
-                    : '已安全拦截 APP 越权跳转，为您提供纯净内嵌播放：'}
+                    ? '正在解析抖音短链 & 转换桌面版网站...'
+                    : '已按电脑桌面版 (Desktop UA) 代理加载，拦截 APP 强行跳转：'}
                 </span>
               </div>
               <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setDouyinPlayerMode('open')}
-                  className={`px-2 py-0.5 rounded-md text-[10px] font-medium transition-colors ${
-                    douyinPlayerMode === 'open'
-                      ? 'bg-[#DC2626] text-white'
-                      : 'bg-white text-[#991B1B] border border-[#FCA5A5] hover:bg-[#FEE2E2]'
-                  }`}
-                >
-                  官方开放播放器
-                </button>
                 <button
                   type="button"
                   onClick={() => setDouyinPlayerMode('pc')}
@@ -300,8 +289,27 @@ export const WebBrowserModal: React.FC<WebBrowserModalProps> = ({
                       : 'bg-white text-[#991B1B] border border-[#FCA5A5] hover:bg-[#FEE2E2]'
                   }`}
                 >
-                  网页视图
+                  🖥️ 桌面版网站模式
                 </button>
+                <button
+                  type="button"
+                  onClick={() => setDouyinPlayerMode('open')}
+                  className={`px-2 py-0.5 rounded-md text-[10px] font-medium transition-colors ${
+                    douyinPlayerMode === 'open'
+                      ? 'bg-[#DC2626] text-white'
+                      : 'bg-white text-[#991B1B] border border-[#FCA5A5] hover:bg-[#FEE2E2]'
+                  }`}
+                >
+                  🎬 开放无框播放器
+                </button>
+                <a
+                  href={resolvedPcUrl || parsed.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-2 py-0.5 rounded-md text-[10px] font-medium bg-white text-[#991B1B] border border-[#FCA5A5] hover:bg-[#FEE2E2] flex items-center gap-1"
+                >
+                  ↗️ 新标签页打开
+                </a>
               </div>
             </div>
           )}
@@ -320,12 +328,10 @@ export const WebBrowserModal: React.FC<WebBrowserModalProps> = ({
             </div>
           ) : (
             <iframe
-              key={`${iframeKey}-${douyinPlayerMode}-${resolvedEmbedUrl || ''}`}
+              key={`${iframeKey}-${douyinPlayerMode}-${resolvedPcUrl || ''}`}
               src={
                 isDouyin
-                  ? douyinPlayerMode === 'open'
-                    ? resolvedEmbedUrl || parsed.embedUrl || parsed.url
-                    : resolvedPcUrl || parsed.url
+                  ? `/api/douyin-proxy?url=${encodeURIComponent(url || '')}&mode=${douyinPlayerMode}`
                   : parsed.embedUrl || parsed.url
               }
               title={effectiveTitle}

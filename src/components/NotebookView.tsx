@@ -1240,14 +1240,7 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
                 </button>
               </div>
 
-              {/* Tips banner */}
-              <div className="w-full rounded-xl bg-[#EFE9DF]/80 border border-[#DFD6C9] p-3 text-[11px] text-[#6E6356] leading-relaxed text-left flex flex-col gap-1">
-                <span className="font-semibold text-[#4A3F35] flex items-center gap-1">
-                  💡 快捷贴入技巧：
-                </span>
-                <p>• <b>剪贴板粘贴：</b>复制照片或截图后，直接在页面上按 <kbd className="px-1 py-0.5 rounded bg-[#FAF7F2] border border-[#DDD4C7] font-mono text-[10px]">Ctrl+V</kbd> 即可贴入。</p>
-                <p>• <b>拖拽文件：</b>从桌面或文件夹将多张照片/视频直接拖进这页纸张。</p>
-              </div>
+
             </div>
           )}
 
