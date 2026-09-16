@@ -12,9 +12,11 @@ import {
   Play,
   Film,
   AlertCircle,
+  Loader2,
+  ShieldCheck,
 } from 'lucide-react';
 import Hls from 'hls.js';
-import { parseWebUrlInfo } from '../../utils/webpage';
+import { parseWebUrlInfo, resolveDouyinUrl } from '../../utils/webpage';
 
 interface WebBrowserModalProps {
   isOpen: boolean;
@@ -33,11 +35,44 @@ export const WebBrowserModal: React.FC<WebBrowserModalProps> = ({
   const [isCopied, setIsCopied] = useState(false);
   const [isMaximized, setIsMaximized] = useState(false);
   const [hasIframeLoadError, setHasIframeLoadError] = useState(false);
+  const [resolvedEmbedUrl, setResolvedEmbedUrl] = useState<string | null>(null);
+  const [resolvedPcUrl, setResolvedPcUrl] = useState<string | null>(null);
+  const [isResolvingDouyin, setIsResolvingDouyin] = useState(false);
+  const [douyinPlayerMode, setDouyinPlayerMode] = useState<'open' | 'pc'>('open');
   const videoRef = useRef<HTMLVideoElement>(null);
 
   const parsed = parseWebUrlInfo(url || '', title);
   const effectiveTitle = title || parsed.suggestedTitle;
   const isDirectVideo = parsed.isDirectVideoFile;
+  const isDouyin = parsed.siteName.includes('抖音') || (url && url.toLowerCase().includes('douyin'));
+
+  // Resolve Douyin short links & video IDs
+  useEffect(() => {
+    if (!isOpen || !url || !isDouyin) {
+      setResolvedEmbedUrl(null);
+      setResolvedPcUrl(null);
+      setIsResolvingDouyin(false);
+      return;
+    }
+
+    let isMounted = true;
+    setIsResolvingDouyin(true);
+
+    resolveDouyinUrl(url).then((res) => {
+      if (!isMounted) return;
+      setIsResolvingDouyin(false);
+      if (res.openEmbedUrl) {
+        setResolvedEmbedUrl(res.openEmbedUrl);
+      }
+      if (res.pcUrl) {
+        setResolvedPcUrl(res.pcUrl);
+      }
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [isOpen, url, isDouyin]);
 
   useEffect(() => {
     if (!isOpen || !url || !isDirectVideo || !videoRef.current) return;
@@ -230,19 +265,44 @@ export const WebBrowserModal: React.FC<WebBrowserModalProps> = ({
 
         {/* Web Browser Frame Content */}
         <div className="flex-1 bg-white relative overflow-hidden flex flex-col">
-          {(parsed.siteName.includes('抖音') || parsed.hostname.includes('douyin')) && (
-            <div className="bg-[#FEF2F2] border-b border-[#FCA5A5] px-3 py-1.5 text-[11px] text-[#991B1B] flex items-center justify-between shrink-0">
+          {isDouyin && (
+            <div className="bg-[#FEF2F2] border-b border-[#FCA5A5] px-3 py-1.5 text-[11px] text-[#991B1B] flex items-center justify-between shrink-0 gap-2 flex-wrap">
               <div className="flex items-center gap-1.5">
-                <Film className="w-3.5 h-3.5 text-[#DC2626] shrink-0" />
-                <span>已兼容抖音视频（自动识别 v.douyin.com 短链与 iesdouyin 分享页）</span>
+                {isResolvingDouyin ? (
+                  <Loader2 className="w-3.5 h-3.5 text-[#DC2626] animate-spin shrink-0" />
+                ) : (
+                  <ShieldCheck className="w-3.5 h-3.5 text-[#16A34A] shrink-0" />
+                )}
+                <span>
+                  {isResolvingDouyin
+                    ? '正在智能解析抖音视频链接 & 拦截 APP 跳转...'
+                    : '已安全拦截 APP 越权跳转，为您提供纯净内嵌播放：'}
+                </span>
               </div>
-              <button
-                type="button"
-                onClick={handleOpenExternal}
-                className="font-medium underline hover:text-[#7F1D1D] flex items-center gap-0.5"
-              >
-                全屏高清观看 <ExternalLink className="w-3 h-3" />
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setDouyinPlayerMode('open')}
+                  className={`px-2 py-0.5 rounded-md text-[10px] font-medium transition-colors ${
+                    douyinPlayerMode === 'open'
+                      ? 'bg-[#DC2626] text-white'
+                      : 'bg-white text-[#991B1B] border border-[#FCA5A5] hover:bg-[#FEE2E2]'
+                  }`}
+                >
+                  官方开放播放器
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDouyinPlayerMode('pc')}
+                  className={`px-2 py-0.5 rounded-md text-[10px] font-medium transition-colors ${
+                    douyinPlayerMode === 'pc'
+                      ? 'bg-[#DC2626] text-white'
+                      : 'bg-white text-[#991B1B] border border-[#FCA5A5] hover:bg-[#FEE2E2]'
+                  }`}
+                >
+                  网页视图
+                </button>
+              </div>
             </div>
           )}
 
@@ -260,14 +320,24 @@ export const WebBrowserModal: React.FC<WebBrowserModalProps> = ({
             </div>
           ) : (
             <iframe
-              key={iframeKey}
-              src={parsed.embedUrl || parsed.url}
+              key={`${iframeKey}-${douyinPlayerMode}-${resolvedEmbedUrl || ''}`}
+              src={
+                isDouyin
+                  ? douyinPlayerMode === 'open'
+                    ? resolvedEmbedUrl || parsed.embedUrl || parsed.url
+                    : resolvedPcUrl || parsed.url
+                  : parsed.embedUrl || parsed.url
+              }
               title={effectiveTitle}
               referrerPolicy="no-referrer"
               className="w-full h-full border-0 bg-white"
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
               allowFullScreen
-              sandbox="allow-scripts allow-same-origin allow-popups allow-forms allow-presentation allow-downloads"
+              sandbox={
+                isDouyin
+                  ? 'allow-scripts allow-same-origin allow-forms allow-presentation'
+                  : 'allow-scripts allow-same-origin allow-popups allow-forms allow-presentation allow-downloads'
+              }
               onError={() => setHasIframeLoadError(true)}
             />
           )}

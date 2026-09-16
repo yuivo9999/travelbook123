@@ -198,7 +198,7 @@ export function parseWebUrlInfo(rawUrl: string, customTitle?: string): ParsedWeb
       pathname.match(/\/(?:share\/video|video|modal\/video)\/(\d+)/i) ||
       url.match(/video\/(\d+)/i);
     if (douyinMatch && douyinMatch[1]) {
-      embedUrl = `https://www.iesdouyin.com/share/video/${douyinMatch[1]}/`;
+      embedUrl = `https://open.douyin.com/player/video?vid=${douyinMatch[1]}`;
     }
   }
 
@@ -222,6 +222,30 @@ export function parseWebUrlInfo(rawUrl: string, customTitle?: string): ParsedWeb
     isDirectVideoFile,
     suggestedTitle,
   };
+}
+
+export async function resolveDouyinUrl(rawUrl: string): Promise<{
+  videoId?: string;
+  openEmbedUrl?: string;
+  pcUrl?: string;
+  finalUrl?: string;
+}> {
+  if (!rawUrl) return {};
+  try {
+    const res = await fetch(`/api/douyin-resolve?url=${encodeURIComponent(rawUrl.trim())}`);
+    if (res.ok) {
+      const data = await res.json();
+      return {
+        videoId: data.videoId,
+        openEmbedUrl: data.openEmbedUrl,
+        pcUrl: data.pcUrl,
+        finalUrl: data.finalUrl,
+      };
+    }
+  } catch (err) {
+    console.warn('Douyin resolve failed:', err);
+  }
+  return {};
 }
 
 export function isDirectImageUrl(rawUrl: string): boolean {
