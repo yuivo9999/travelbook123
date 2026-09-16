@@ -37,6 +37,7 @@ export const WebBrowserModal: React.FC<WebBrowserModalProps> = ({
   const [hasIframeLoadError, setHasIframeLoadError] = useState(false);
   const [resolvedEmbedUrl, setResolvedEmbedUrl] = useState<string | null>(null);
   const [resolvedPcUrl, setResolvedPcUrl] = useState<string | null>(null);
+  const [resolvedMDouyinUrl, setResolvedMDouyinUrl] = useState<string | null>(null);
   const [isResolvingDouyin, setIsResolvingDouyin] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
 
@@ -50,6 +51,7 @@ export const WebBrowserModal: React.FC<WebBrowserModalProps> = ({
     if (!isOpen || !url || !isDouyin) {
       setResolvedEmbedUrl(null);
       setResolvedPcUrl(null);
+      setResolvedMDouyinUrl(null);
       setIsResolvingDouyin(false);
       return;
     }
@@ -60,6 +62,9 @@ export const WebBrowserModal: React.FC<WebBrowserModalProps> = ({
     resolveDouyinUrl(url).then((res) => {
       if (!isMounted) return;
       setIsResolvingDouyin(false);
+      if (res.mDouyinUrl) {
+        setResolvedMDouyinUrl(res.mDouyinUrl);
+      }
       if (res.openEmbedUrl) {
         setResolvedEmbedUrl(res.openEmbedUrl);
       }
@@ -274,17 +279,17 @@ export const WebBrowserModal: React.FC<WebBrowserModalProps> = ({
                 )}
                 <span>
                   {isResolvingDouyin
-                    ? '正在智能解析抖音视频链接...'
-                    : '已启用无痕纯净播放模式（Cookie隔离 + 拦截APP强行跳转），普通浏览模式亦可直接播放'}
+                    ? '正在智能自动转换至第三阶段手机网页网址...'
+                    : '已自动转换为第三阶段手机浏览网页模式 (m.douyin.com/share/video/)'}
                 </span>
               </div>
               <a
-                href={resolvedPcUrl || parsed.url}
+                href={resolvedMDouyinUrl || resolvedPcUrl || parsed.url}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="px-2.5 py-1 rounded-md text-[11px] font-semibold bg-[#DC2626] text-white hover:bg-[#B91C1C] flex items-center gap-1 shadow-sm transition-colors shrink-0"
               >
-                🚀 在手机浏览器直达 PC 网页 <ExternalLink className="w-3 h-3" />
+                🚀 手机网页模式直达 (m.douyin.com) <ExternalLink className="w-3 h-3" />
               </a>
             </div>
           )}
@@ -303,10 +308,10 @@ export const WebBrowserModal: React.FC<WebBrowserModalProps> = ({
             </div>
           ) : (
             <iframe
-              key={`${iframeKey}-${resolvedEmbedUrl || ''}-${resolvedPcUrl || ''}`}
+              key={`${iframeKey}-${resolvedMDouyinUrl || ''}-${resolvedPcUrl || ''}`}
               src={
                 isDouyin
-                  ? resolvedEmbedUrl || parsed.embedUrl || resolvedPcUrl || parsed.url
+                  ? resolvedMDouyinUrl || parsed.embedUrl || resolvedPcUrl || parsed.url
                   : parsed.embedUrl || parsed.url
               }
               title={effectiveTitle}
