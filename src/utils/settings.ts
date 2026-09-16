@@ -9,6 +9,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
   snapToGrid: false,
   paperCornerStyle: 'rounded',
   showGridGuides: false,
+  rotationSensitivity: 1.0,
+  enableRotationSound: true,
+  rotationSoundVolume: 100,
 };
 
 export function loadSettings(): AppSettings {

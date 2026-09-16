@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Book, Calendar, Layers, Trash2, ArrowRight } from 'lucide-react';
+import { Book, Calendar, Layers, Trash2, ArrowRight, Download } from 'lucide-react';
 import { Notebook } from '../types';
 import { formatDate, createSafeBlobUrl } from '../utils/media';
 import { getMedia } from '../db/indexedDB';
@@ -8,12 +8,14 @@ interface NotebookCardProps {
   notebook: Notebook;
   onOpen: (id: string) => void;
   onDeleteRequest: (notebook: Notebook) => void;
+  onExportRequest?: (notebook: Notebook) => void;
 }
 
 export const NotebookCard: React.FC<NotebookCardProps> = ({
   notebook,
   onOpen,
   onDeleteRequest,
+  onExportRequest,
 }) => {
   const [coverUrl, setCoverUrl] = useState<string | null>(null);
 
@@ -63,17 +65,32 @@ export const NotebookCard: React.FC<NotebookCardProps> = ({
             </h3>
           </div>
 
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onDeleteRequest(notebook);
-            }}
-            className="p-1.5 rounded-lg text-[#998E84] hover:text-[#C5221F] hover:bg-[#F0EAE1] transition-colors"
-            title="删除手账"
-          >
-            <Trash2 className="w-4 h-4" />
-          </button>
+          <div className="flex items-center gap-0.5">
+            {onExportRequest && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onExportRequest(notebook);
+                }}
+                className="p-1.5 rounded-lg text-[#998E84] hover:text-[#4A3F35] hover:bg-[#F0EAE1] transition-colors"
+                title="导出这本手账"
+              >
+                <Download className="w-4 h-4" />
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onDeleteRequest(notebook);
+              }}
+              className="p-1.5 rounded-lg text-[#998E84] hover:text-[#C5221F] hover:bg-[#F0EAE1] transition-colors"
+              title="删除手账"
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
+          </div>
         </div>
 
         {/* Thumbnail Preview strip if exists */}

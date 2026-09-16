@@ -14,16 +14,20 @@ import {
   Film,
   Type,
   Upload,
+  Download,
 } from 'lucide-react';
 import { Notebook, ContentItem, MediaRecord } from '../types';
+import { ExportModal } from './modals/ExportModal';
 import {
   getItemsByNotebook,
   saveItem,
   updateItemPosition,
+  updateItemTransform,
   deleteItem,
   saveMedia,
   saveNotebook,
 } from '../db/indexedDB';
+import { playMechanicalTick } from '../utils/rotationSound';
 import { processImageFile, processVideoFile } from '../utils/media';
 
 function inferMimeType(file: File, defaultType: string): string {
@@ -75,6 +79,7 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
 
   // Modals state
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [previewImageId, setPreviewImageId] = useState<string | null>(null);
   const [previewVideoId, setPreviewVideoId] = useState<string | null>(null);
   const [itemToDelete, setItemToDelete] = useState<{ id: string; mediaId?: string } | null>(null);
@@ -111,6 +116,30 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
     initialItemY: number;
     pointerId: number;
     hasMoved: boolean;
+  } | null>(null);
+
+  // Rotating interaction state
+  const rotatingRef = useRef<{
+    itemId: string;
+    cx: number;
+    cy: number;
+    startAngle: number;
+    initialRotation: number;
+    pointerId: number;
+    lastTickAngle: number;
+    hasRotated: boolean;
+  } | null>(null);
+
+  // Resizing interaction state (for customizable sticky notes)
+  const resizingRef = useRef<{
+    itemId: string;
+    startX: number;
+    startY: number;
+    initialWidth: number;
+    initialHeight: number;
+    rotationRad: number;
+    pointerId: number;
+    hasResized: boolean;
   } | null>(null);
 
   // Load items from IndexedDB
@@ -482,7 +511,7 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
     }
   };
 
-  // ---------------- Drag & Drop logic ----------------
+  // ---------------- Drag, Rotate & Resize logic ----------------
   // Supports pointer events with pointer capture for reliable mobile touch + desktop mouse.
   const handleDragStart = (e: React.PointerEvent, item: ContentItem) => {
     e.stopPropagation();
@@ -507,58 +536,269 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
     };
   };
 
-  const handlePointerMove = (e: React.PointerEvent) => {
-    if (!draggingRef.current) return;
-    const { itemId, startX, startY, initialItemX, initialItemY } = draggingRef.current;
+  // Rotate interaction start
+  const handleRotateStart = (e: React.PointerEvent, item: ContentItem) => {
+    e.stopPropagation();
 
-    const deltaX = e.clientX - startX;
-    const deltaY = e.clientY - startY;
-
-    if (Math.abs(deltaX) > 3 || Math.abs(deltaY) > 3) {
-      draggingRef.current.hasMoved = true;
-    }
-
-    const item = items.find((i) => i.id === itemId);
-    const itemWidth = item ? Math.min(item.width, canvasWidth - 32) : 260;
-
-    // Bounds clamping
-    const minX = 8;
-    const maxX = Math.max(minX, canvasWidth - itemWidth - 8);
-    const minY = 12;
-
-    let targetX = initialItemX + deltaX;
-    let targetY = initialItemY + deltaY;
-
-    if (settings.snapToGrid) {
-      targetX = Math.round(targetX / 12) * 12;
-      targetY = Math.round(targetY / 12) * 12;
-    }
-
-    const newX = Math.max(minX, Math.min(maxX, targetX));
-    const newY = Math.max(minY, targetY);
-
+    const newZ = ++maxZIndexRef.current;
     setItems((prev) =>
-      prev.map((it) => (it.id === itemId ? { ...it, x: newX, y: newY } : it))
+      prev.map((it) => (it.id === item.id ? { ...it, zIndex: newZ } : it))
     );
+
+    const el = document.getElementById(`item-${item.id}`);
+    const rect = el ? el.getBoundingClientRect() : null;
+    const cx = rect ? rect.left + rect.width / 2 : item.x + (item.width || 260) / 2;
+    const cy = rect ? rect.top + rect.height / 2 : item.y + (item.height || 180) / 2;
+
+    const startAngle = Math.atan2(e.clientY - cy, e.clientX - cx) * (180 / Math.PI);
+    const initialRotation = item.rotation || 0;
+
+    const targetElement = e.currentTarget as HTMLElement;
+    targetElement.setPointerCapture(e.pointerId);
+
+    // Initial subtle click feedback
+    playMechanicalTick(settings.rotationSoundVolume, settings.enableRotationSound);
+
+    rotatingRef.current = {
+      itemId: item.id,
+      cx,
+      cy,
+      startAngle,
+      initialRotation,
+      pointerId: e.pointerId,
+      lastTickAngle: initialRotation,
+      hasRotated: false,
+    };
+  };
+
+  // Resize interaction start (for customizable notes)
+  const handleResizeStart = (e: React.PointerEvent, item: ContentItem) => {
+    e.stopPropagation();
+
+    const newZ = ++maxZIndexRef.current;
+    setItems((prev) =>
+      prev.map((it) => (it.id === item.id ? { ...it, zIndex: newZ } : it))
+    );
+
+    const targetElement = e.currentTarget as HTMLElement;
+    targetElement.setPointerCapture(e.pointerId);
+
+    const rotationRad = ((item.rotation || 0) * Math.PI) / 180;
+    resizingRef.current = {
+      itemId: item.id,
+      startX: e.clientX,
+      startY: e.clientY,
+      initialWidth: item.width || 260,
+      initialHeight: item.height || 160,
+      rotationRad,
+      pointerId: e.pointerId,
+      hasResized: false,
+    };
+  };
+
+  // Reset transformation to default
+  const handleResetTransform = async (item: ContentItem) => {
+    // Play mechanical sound
+    playMechanicalTick(settings.rotationSoundVolume, settings.enableRotationSound);
+
+    if (item.type === 'text') {
+      const defaultWidth = 260;
+      const defaultHeight = 160;
+      const defaultRotation = 0;
+
+      setItems((prev) =>
+        prev.map((it) =>
+          it.id === item.id
+            ? { ...it, width: defaultWidth, height: defaultHeight, rotation: defaultRotation }
+            : it
+        )
+      );
+
+      await updateItemTransform(item.id, {
+        width: defaultWidth,
+        height: defaultHeight,
+        rotation: defaultRotation,
+      });
+      showToast('便签已恢复默认大小与角度', 'info');
+    } else {
+      setItems((prev) =>
+        prev.map((it) => (it.id === item.id ? { ...it, rotation: 0 } : it))
+      );
+      await updateItemTransform(item.id, { rotation: 0 });
+      showToast('已恢复默认角度 (0°)', 'info');
+    }
+  };
+
+  const handlePointerMove = (e: React.PointerEvent) => {
+    // 1. Check rotating
+    if (rotatingRef.current) {
+      const { itemId, cx, cy, startAngle, initialRotation, lastTickAngle } = rotatingRef.current;
+      const currentAngle = Math.atan2(e.clientY - cy, e.clientX - cx) * (180 / Math.PI);
+      let angleDiff = currentAngle - startAngle;
+
+      // Adjust wrapping around -180 to 180
+      while (angleDiff > 180) angleDiff -= 360;
+      while (angleDiff < -180) angleDiff += 360;
+
+      const sensitivity = settings.rotationSensitivity || 1.0;
+      let targetRotation = initialRotation + angleDiff * sensitivity;
+
+      // Magnetic snap near 0°, 90°, -90°, 180°, -180°
+      const normalizedMod = ((targetRotation % 360) + 360) % 360;
+      if (normalizedMod < 3 || normalizedMod > 357) {
+        targetRotation = Math.round(targetRotation / 360) * 360;
+      } else if (Math.abs(normalizedMod - 90) < 3) {
+        targetRotation = Math.floor(targetRotation / 360) * 360 + 90;
+      } else if (Math.abs(normalizedMod - 180) < 3) {
+        targetRotation = Math.floor(targetRotation / 360) * 360 + 180;
+      } else if (Math.abs(normalizedMod - 270) < 3) {
+        targetRotation = Math.floor(targetRotation / 360) * 360 + 270;
+      }
+
+      targetRotation = Math.round(targetRotation * 10) / 10;
+
+      // Mechanical ratchet tick sound triggered on incremental angle advancement
+      const tickStep = 6;
+      if (Math.abs(targetRotation - lastTickAngle) >= tickStep) {
+        playMechanicalTick(settings.rotationSoundVolume, settings.enableRotationSound);
+        rotatingRef.current.lastTickAngle = targetRotation;
+      }
+
+      setItems((prev) =>
+        prev.map((it) => (it.id === itemId ? { ...it, rotation: targetRotation } : it))
+      );
+      rotatingRef.current.hasRotated = true;
+      return;
+    }
+
+    // 2. Check resizing
+    if (resizingRef.current) {
+      const { itemId, startX, startY, initialWidth, initialHeight, rotationRad } = resizingRef.current;
+      const dx = e.clientX - startX;
+      const dy = e.clientY - startY;
+
+      // Local coordinate projection
+      const localDw = dx * Math.cos(rotationRad) + dy * Math.sin(rotationRad);
+      const localDh = -dx * Math.sin(rotationRad) + dy * Math.cos(rotationRad);
+
+      let newW = Math.max(160, Math.min(canvasWidth - 32, initialWidth + localDw));
+      let newH = Math.max(90, Math.min(1200, initialHeight + localDh));
+
+      if (settings.snapToGrid) {
+        newW = Math.round(newW / 12) * 12;
+        newH = Math.round(newH / 12) * 12;
+      }
+
+      setItems((prev) =>
+        prev.map((it) =>
+          it.id === itemId
+            ? { ...it, width: Math.round(newW), height: Math.round(newH) }
+            : it
+        )
+      );
+      resizingRef.current.hasResized = true;
+      return;
+    }
+
+    // 3. Check dragging
+    if (draggingRef.current) {
+      const { itemId, startX, startY, initialItemX, initialItemY } = draggingRef.current;
+
+      const deltaX = e.clientX - startX;
+      const deltaY = e.clientY - startY;
+
+      if (Math.abs(deltaX) > 3 || Math.abs(deltaY) > 3) {
+        draggingRef.current.hasMoved = true;
+      }
+
+      const item = items.find((i) => i.id === itemId);
+      const itemWidth = item ? Math.min(item.width, canvasWidth - 32) : 260;
+
+      // Bounds clamping
+      const minX = 8;
+      const maxX = Math.max(minX, canvasWidth - itemWidth - 8);
+      const minY = 12;
+
+      let targetX = initialItemX + deltaX;
+      let targetY = initialItemY + deltaY;
+
+      if (settings.snapToGrid) {
+        targetX = Math.round(targetX / 12) * 12;
+        targetY = Math.round(targetY / 12) * 12;
+      }
+
+      const newX = Math.max(minX, Math.min(maxX, targetX));
+      const newY = Math.max(minY, targetY);
+
+      setItems((prev) =>
+        prev.map((it) => (it.id === itemId ? { ...it, x: newX, y: newY } : it))
+      );
+    }
   };
 
   const handlePointerUp = async (e: React.PointerEvent) => {
-    if (!draggingRef.current) return;
-    const { itemId, hasMoved, pointerId } = draggingRef.current;
+    // 1. Rotation finish
+    if (rotatingRef.current) {
+      const { itemId, hasRotated, pointerId } = rotatingRef.current;
+      try {
+        (e.currentTarget as HTMLElement).releasePointerCapture?.(pointerId);
+      } catch {
+        // ignore
+      }
+      rotatingRef.current = null;
 
-    try {
-      (e.currentTarget as HTMLElement).releasePointerCapture?.(pointerId);
-    } catch {
-      // ignore
+      if (hasRotated) {
+        const current = items.find((i) => i.id === itemId);
+        if (current) {
+          await updateItemTransform(current.id, {
+            rotation: current.rotation,
+            zIndex: current.zIndex,
+          });
+        }
+      }
+      return;
     }
 
-    draggingRef.current = null;
+    // 2. Resizing finish
+    if (resizingRef.current) {
+      const { itemId, hasResized, pointerId } = resizingRef.current;
+      try {
+        (e.currentTarget as HTMLElement).releasePointerCapture?.(pointerId);
+      } catch {
+        // ignore
+      }
+      resizingRef.current = null;
 
-    if (hasMoved) {
-      const current = items.find((i) => i.id === itemId);
-      if (current) {
-        // Auto-save position to IndexedDB
-        await updateItemPosition(current.id, current.x, current.y, current.zIndex);
+      if (hasResized) {
+        const current = items.find((i) => i.id === itemId);
+        if (current) {
+          await updateItemTransform(current.id, {
+            width: current.width,
+            height: current.height,
+          });
+        }
+      }
+      return;
+    }
+
+    // 3. Dragging finish
+    if (draggingRef.current) {
+      const { itemId, hasMoved, pointerId } = draggingRef.current;
+
+      try {
+        (e.currentTarget as HTMLElement).releasePointerCapture?.(pointerId);
+      } catch {
+        // ignore
+      }
+
+      draggingRef.current = null;
+
+      if (hasMoved) {
+        const current = items.find((i) => i.id === itemId);
+        if (current) {
+          // Auto-save position to IndexedDB
+          await updateItemPosition(current.id, current.x, current.y, current.zIndex);
+        }
       }
     }
   };
@@ -648,30 +888,6 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
               }}
             />
 
-            {/* Quick Photo Upload Button */}
-            <button
-              type="button"
-              id="btn-quick-add-photo"
-              onClick={() => directImageInputRef.current?.click()}
-              className="flex items-center gap-1 px-2.5 sm:px-3 py-1.5 rounded-xl bg-[#FAF6F0] hover:bg-[#F2ECE1] border border-[#DDD4C7] text-[#4A3F35] text-xs font-medium transition-all active:scale-95 shadow-2xs"
-              title="快速选择并贴入本地照片 (也支持 Ctrl+V 直接粘贴)"
-            >
-              <ImageIcon className="w-3.5 h-3.5 text-[#5C6E5C]" />
-              <span className="hidden xs:inline">贴照片</span>
-            </button>
-
-            {/* Quick Video Upload Button */}
-            <button
-              type="button"
-              id="btn-quick-add-video"
-              onClick={() => directVideoInputRef.current?.click()}
-              className="flex items-center gap-1 px-2.5 sm:px-3 py-1.5 rounded-xl bg-[#FAF6F0] hover:bg-[#F2ECE1] border border-[#DDD4C7] text-[#4A3F35] text-xs font-medium transition-all active:scale-95 shadow-2xs"
-              title="快速选择并贴入本地视频"
-            >
-              <VideoIcon className="w-3.5 h-3.5 text-[#8C4E3D]" />
-              <span className="hidden xs:inline">贴视频</span>
-            </button>
-
             {/* Paper pattern selector: quick compact selector */}
             <div className="hidden sm:flex items-center bg-[#EFE9E0] p-0.5 rounded-xl border border-[#E0D7CC] text-xs">
               <select
@@ -687,6 +903,18 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
                 ))}
               </select>
             </div>
+
+            {/* Export current notebook button */}
+            <button
+              type="button"
+              id="btn-notebook-export"
+              onClick={() => setIsExportModalOpen(true)}
+              className="flex items-center gap-1 px-2.5 sm:px-3 py-1.5 rounded-xl bg-[#FAF6F0] hover:bg-[#F2ECE1] border border-[#DDD4C7] text-[#4A3F35] text-xs font-medium transition-all active:scale-95 shadow-2xs"
+              title="导出这本手账 (可自选全部完整媒体或轻量缩略图/原文件链接)"
+            >
+              <Download className="w-3.5 h-3.5 text-[#594E42]" />
+              <span className="hidden xs:inline">导出</span>
+            </button>
 
             {/* Settings button */}
             <button
@@ -847,6 +1075,9 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
                   item={item}
                   canvasWidth={canvasWidth}
                   onDragStart={handleDragStart}
+                  onRotateStart={handleRotateStart}
+                  onResizeStart={handleResizeStart}
+                  onResetTransform={handleResetTransform}
                   onUpdateText={handleUpdateText}
                   onDelete={(id) => setItemToDelete({ id })}
                 />
@@ -860,6 +1091,8 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
                   item={item}
                   canvasWidth={canvasWidth}
                   onDragStart={handleDragStart}
+                  onRotateStart={handleRotateStart}
+                  onResetTransform={handleResetTransform}
                   onViewImage={(mediaId) => setPreviewImageId(mediaId || null)}
                   onDelete={(id, mediaId) => setItemToDelete({ id, mediaId })}
                 />
@@ -873,6 +1106,8 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
                   item={item}
                   canvasWidth={canvasWidth}
                   onDragStart={handleDragStart}
+                  onRotateStart={handleRotateStart}
+                  onResetTransform={handleResetTransform}
                   onPlayVideo={(mediaId) => setPreviewVideoId(mediaId || null)}
                   onDelete={(id, mediaId) => setItemToDelete({ id, mediaId })}
                 />
@@ -959,6 +1194,14 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
         isDanger={true}
         onConfirm={handleConfirmDeleteItem}
         onCancel={() => setItemToDelete(null)}
+      />
+
+      {/* Export Modal */}
+      <ExportModal
+        isOpen={isExportModalOpen}
+        initialNotebookId={notebook.id}
+        onClose={() => setIsExportModalOpen(false)}
+        showToast={showToast}
       />
     </div>
   );

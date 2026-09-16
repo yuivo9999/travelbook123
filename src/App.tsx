@@ -175,6 +175,7 @@ export default function App() {
           onOpenNotebook={(id) => setActiveNotebookId(id)}
           onDeleteNotebook={handleDeleteNotebook}
           onOpenSettings={() => setIsSettingsOpen(true)}
+          showToast={showToast}
         />
       )}
     </div>

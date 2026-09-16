@@ -1,5 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { GripHorizontal, Trash2, Maximize2, Image as ImageIcon } from 'lucide-react';
+import {
+  GripHorizontal,
+  Trash2,
+  Maximize2,
+  Image as ImageIcon,
+  Link2,
+  RotateCw,
+  RotateCcw,
+} from 'lucide-react';
 import { ContentItem } from '../../types';
 import { getMedia } from '../../db/indexedDB';
 import { createSafeBlobUrl } from '../../utils/media';
@@ -11,6 +19,8 @@ interface ImageItemProps {
   item: ContentItem;
   canvasWidth: number;
   onDragStart: (e: React.PointerEvent, item: ContentItem) => void;
+  onRotateStart: (e: React.PointerEvent, item: ContentItem) => void;
+  onResetTransform: (item: ContentItem) => void;
   onViewImage: (mediaId?: string) => void;
   onDelete: (id: string, mediaId?: string) => void;
 }
@@ -19,12 +29,18 @@ export const ImageItem: React.FC<ImageItemProps> = ({
   item,
   canvasWidth,
   onDragStart,
+  onRotateStart,
+  onResetTransform,
   onViewImage,
   onDelete,
 }) => {
   const [thumbUrl, setThumbUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
+  const [fileMeta, setFileMeta] = useState<{ fileName?: string; sourceUrl?: string }>({
+    fileName: item.fileName,
+    sourceUrl: item.sourceUrl,
+  });
 
   useEffect(() => {
     let isMounted = true;
@@ -48,6 +64,10 @@ export const ImageItem: React.FC<ImageItemProps> = ({
         setHasError(false);
         const media = await getMedia(item.mediaId);
         if (media && isMounted) {
+          setFileMeta({
+            fileName: media.fileName || item.fileName,
+            sourceUrl: media.sourceUrl || item.sourceUrl,
+          });
           const blobToUse = media.thumbnailBlob || media.blob;
           const url = createSafeBlobUrl(blobToUse, media.mimeType || 'image/jpeg');
           if (url) {
@@ -72,7 +92,7 @@ export const ImageItem: React.FC<ImageItemProps> = ({
     return () => {
       isMounted = false;
     };
-  }, [item.mediaId]);
+  }, [item.mediaId, item.fileName, item.sourceUrl]);
 
   const handleImageError = async () => {
     if (!item.mediaId) return;
@@ -103,13 +123,25 @@ export const ImageItem: React.FC<ImageItemProps> = ({
       }}
       className="absolute top-0 left-0 transition-shadow duration-150 group touch-auto select-none"
     >
+      {/* Top Protruding Rotation Handle (Touch-friendly & Desktop) */}
+      <div
+        onPointerDown={(e) => onRotateStart(e, item)}
+        className="absolute -top-7 left-1/2 -translate-x-1/2 flex flex-col items-center cursor-grab active:cursor-grabbing touch-none z-30 select-none group/rot"
+        title="按住旋转照片 (支持机械音效与灵敏度调节)"
+      >
+        <div className="w-6 h-6 rounded-full bg-white border border-[#D9CEBF] shadow-xs flex items-center justify-center text-[#7D7062] group-hover/rot:text-[#2D2721] group-hover/rot:scale-110 active:scale-95 transition-all">
+          <RotateCw className="w-3 h-3" />
+        </div>
+        <div className="w-0.5 h-1.5 bg-[#D9CEBF]" />
+      </div>
+
       <div className="relative bg-[#FFFFFF] rounded-xl border border-[#E6E0D6] p-2.5 shadow-[var(--scrap-shadow)] hover:shadow-[var(--scrap-hover)] transition-all">
         {/* Top washi tape grab handle */}
         <div className="flex items-center justify-between pb-1.5 border-b border-black/5 mb-1.5">
           <div
             onPointerDown={(e) => onDragStart(e, item)}
             className="flex-1 flex items-center justify-center py-1 cursor-grab active:cursor-grabbing touch-none select-none text-[#94887C] hover:text-[#4A3F35]"
-            title="按住拖拽移动位置"
+            title="按住拖拽移动照片位置"
           >
             <div className="h-2.5 w-16 rounded-xs bg-[#E5D7C3]/90 border border-black/10 flex items-center justify-center">
               <GripHorizontal className="w-3 h-3 opacity-60" />
@@ -124,6 +156,14 @@ export const ImageItem: React.FC<ImageItemProps> = ({
               title="查看大图"
             >
               <Maximize2 className="w-3.5 h-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => onResetTransform(item)}
+              className="p-1 rounded-md text-[#7D7062] hover:text-[#2D2721] hover:bg-black/5 transition-colors"
+              title="恢复默认角度 (0°)"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
             </button>
             <button
               type="button"
@@ -168,6 +208,28 @@ export const ImageItem: React.FC<ImageItemProps> = ({
             </div>
           )}
         </div>
+
+        {/* Polaroid bottom caption / Original file link */}
+        {(fileMeta.fileName || fileMeta.sourceUrl) && (
+          <div className="mt-1.5 pt-1.5 border-t border-black/5 flex items-center justify-between text-[10px] text-[#827466]">
+            <a
+              href={fileMeta.sourceUrl?.startsWith('http') ? fileMeta.sourceUrl : undefined}
+              target={fileMeta.sourceUrl?.startsWith('http') ? '_blank' : undefined}
+              rel="noreferrer"
+              onClick={(e) => {
+                if (!fileMeta.sourceUrl?.startsWith('http')) {
+                  e.preventDefault();
+                  navigator.clipboard?.writeText(fileMeta.sourceUrl || fileMeta.fileName || '');
+                }
+              }}
+              className="flex items-center gap-1 max-w-full truncate hover:text-[#4A3F35] transition-colors"
+              title={`原文件地址: ${fileMeta.sourceUrl || fileMeta.fileName || ''} (点击复制或打开)`}
+            >
+              <Link2 className="w-3 h-3 shrink-0 opacity-70" />
+              <span className="truncate">{fileMeta.fileName || fileMeta.sourceUrl}</span>
+            </a>
+          </div>
+        )}
       </div>
     </div>
   );

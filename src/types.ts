@@ -16,6 +16,9 @@ export interface AppSettings {
   snapToGrid: boolean;
   paperCornerStyle: 'rounded' | 'sharp' | 'stamp';
   showGridGuides: boolean;
+  rotationSensitivity: number; // 0.5 to 2.0 (default 1.0)
+  enableRotationSound: boolean; // default true
+  rotationSoundVolume: number; // 0 to 200 (default 100)
 }
 
 export interface Notebook {
@@ -44,6 +47,8 @@ export interface ContentItem {
   createdAt: number;
   updatedAt: number;
   noteColor?: 'yellow' | 'white' | 'blue' | 'pink' | 'kraft';
+  sourceUrl?: string;
+  fileName?: string;
 }
 
 export interface MediaRecord {
@@ -57,6 +62,7 @@ export interface MediaRecord {
   height?: number;
   duration?: number; // in seconds for video
   fileName?: string;
+  sourceUrl?: string;
   fileSize?: number;
   createdAt: number;
 }

@@ -229,6 +229,42 @@ export async function updateItemPosition(
   });
 }
 
+export async function updateItemTransform(
+  id: string,
+  transform: {
+    x?: number;
+    y?: number;
+    width?: number;
+    height?: number;
+    rotation?: number;
+    zIndex?: number;
+  }
+): Promise<void> {
+  const db = await openDatabase();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('items', 'readwrite');
+    const store = tx.objectStore('items');
+    const getReq = store.get(id);
+
+    getReq.onsuccess = () => {
+      if (getReq.result) {
+        const item = getReq.result as ContentItem;
+        if (transform.x !== undefined) item.x = Math.round(transform.x);
+        if (transform.y !== undefined) item.y = Math.round(transform.y);
+        if (transform.width !== undefined) item.width = Math.round(transform.width);
+        if (transform.height !== undefined) item.height = Math.round(transform.height);
+        if (transform.rotation !== undefined) item.rotation = Math.round(transform.rotation * 10) / 10;
+        if (transform.zIndex !== undefined) item.zIndex = transform.zIndex;
+        item.updatedAt = Date.now();
+        store.put(item);
+      }
+    };
+
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(new Error('更新内容变形失败'));
+  });
+}
+
 export async function deleteItem(id: string, mediaId?: string): Promise<void> {
   const db = await openDatabase();
   return new Promise((resolve, reject) => {

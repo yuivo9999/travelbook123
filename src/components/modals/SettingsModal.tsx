@@ -13,16 +13,22 @@ import {
   FileText,
   Layers,
   LayoutGrid,
+  RotateCw,
+  Volume2,
+  VolumeX,
+  Sliders,
 } from 'lucide-react';
 import { AppSettings, BackgroundSkin, PaperStyle } from '../../types';
 import {
   BACKGROUND_SKINS,
   PAPER_PATTERNS,
   getStorageQuotaInfo,
-  exportAllDataToJSON,
-  importDataFromJSON,
 } from '../../utils/settings';
+import { parseBackupFile, ScrapbookBackup } from '../../utils/exportImport';
 import { getDatabaseStats, clearAllDatabaseData } from '../../db/indexedDB';
+import { playMechanicalTick } from '../../utils/rotationSound';
+import { ExportModal } from './ExportModal';
+import { ImportModal } from './ImportModal';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -34,7 +40,7 @@ interface SettingsModalProps {
   showToast: (text: string, type?: 'success' | 'error' | 'info') => void;
 }
 
-type TabType = 'visual' | 'storage' | 'about';
+type TabType = 'visual' | 'interaction' | 'storage' | 'about';
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
   isOpen,
@@ -57,8 +63,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     mediaCount: number;
   }>({ notebookCount: 0, itemCount: 0, mediaCount: 0 });
   const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false);
-  const [isExporting, setIsExporting] = useState(false);
-  const [isImporting, setIsImporting] = useState(false);
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [pendingBackup, setPendingBackup] = useState<ScrapbookBackup | null>(null);
+  const [isParsingFile, setIsParsingFile] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Load stats when opened or tab changed to storage
@@ -102,18 +110,32 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     showToast(nextVal ? '已开启对齐网格吸附' : '已关闭网格吸附', 'info');
   };
 
-  // Export JSON
-  const handleExport = async () => {
-    try {
-      setIsExporting(true);
-      await exportAllDataToJSON();
-      showToast('手账备份文件已导出至下载目录', 'success');
-    } catch (e) {
-      console.error(e);
-      showToast('导出备份失败', 'error');
-    } finally {
-      setIsExporting(false);
+  const handleUpdateSensitivity = (val: number) => {
+    onUpdateSettings({ ...settings, rotationSensitivity: Math.round(val * 10) / 10 });
+  };
+
+  const handleToggleRotationSound = () => {
+    const nextVal = !settings.enableRotationSound;
+    onUpdateSettings({ ...settings, enableRotationSound: nextVal });
+    if (nextVal) {
+      playMechanicalTick(settings.rotationSoundVolume ?? 100, true);
+      showToast('已开启机械化旋转音效', 'success');
+    } else {
+      showToast('已关闭机械化旋转音效', 'info');
     }
+  };
+
+  const handleUpdateVolume = (vol: number) => {
+    onUpdateSettings({ ...settings, rotationSoundVolume: Math.round(vol) });
+  };
+
+  const handleTestRotationSound = () => {
+    playMechanicalTick(settings.rotationSoundVolume ?? 100, true);
+  };
+
+  // Export Modal trigger
+  const handleOpenExportModal = () => {
+    setIsExportModalOpen(true);
   };
 
   // Import JSON trigger
@@ -126,16 +148,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     if (!file) return;
 
     try {
-      setIsImporting(true);
-      const result = await importDataFromJSON(file);
-      showToast(`成功恢复 ${result.notebookCount} 本手账，共 ${result.itemCount} 项内容`, 'success');
-      onDataImported();
-      onClose();
+      setIsParsingFile(true);
+      const parsed = await parseBackupFile(file);
+      setPendingBackup(parsed);
+      setIsImportModalOpen(true);
     } catch (err) {
       console.error(err);
-      showToast(err instanceof Error ? err.message : '导入失败，请检查文件格式', 'error');
+      showToast(err instanceof Error ? err.message : '解析备份文件失败，请确认文件格式', 'error');
     } finally {
-      setIsImporting(false);
+      setIsParsingFile(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
@@ -197,11 +218,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         </div>
 
         {/* Tab Navigation */}
-        <div className="flex items-center px-5 sm:px-7 pt-2.5 border-b border-[#EAE3D6] gap-2 bg-[#FAF7F2]">
+        <div className="flex items-center px-5 sm:px-7 pt-2.5 border-b border-[#EAE3D6] gap-2 bg-[#FAF7F2] overflow-x-auto scrollbar-none">
           <button
             type="button"
             onClick={() => setActiveTab('visual')}
-            className={`flex items-center gap-1.5 px-3 py-2 text-xs sm:text-sm font-medium border-b-2 transition-all ${
+            className={`flex items-center gap-1.5 px-3 py-2 text-xs sm:text-sm font-medium border-b-2 transition-all whitespace-nowrap ${
               activeTab === 'visual'
                 ? 'border-[#4A3F35] text-[#382F26] font-bold'
                 : 'border-transparent text-[#8C7E70] hover:text-[#382F26]'
@@ -213,8 +234,21 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
           <button
             type="button"
+            onClick={() => setActiveTab('interaction')}
+            className={`flex items-center gap-1.5 px-3 py-2 text-xs sm:text-sm font-medium border-b-2 transition-all whitespace-nowrap ${
+              activeTab === 'interaction'
+                ? 'border-[#4A3F35] text-[#382F26] font-bold'
+                : 'border-transparent text-[#8C7E70] hover:text-[#382F26]'
+            }`}
+          >
+            <RotateCw className="w-3.5 h-3.5" />
+            <span>旋转与音效</span>
+          </button>
+
+          <button
+            type="button"
             onClick={() => setActiveTab('storage')}
-            className={`flex items-center gap-1.5 px-3 py-2 text-xs sm:text-sm font-medium border-b-2 transition-all ${
+            className={`flex items-center gap-1.5 px-3 py-2 text-xs sm:text-sm font-medium border-b-2 transition-all whitespace-nowrap ${
               activeTab === 'storage'
                 ? 'border-[#4A3F35] text-[#382F26] font-bold'
                 : 'border-transparent text-[#8C7E70] hover:text-[#382F26]'
@@ -227,7 +261,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           <button
             type="button"
             onClick={() => setActiveTab('about')}
-            className={`flex items-center gap-1.5 px-3 py-2 text-xs sm:text-sm font-medium border-b-2 transition-all ${
+            className={`flex items-center gap-1.5 px-3 py-2 text-xs sm:text-sm font-medium border-b-2 transition-all whitespace-nowrap ${
               activeTab === 'about'
                 ? 'border-[#4A3F35] text-[#382F26] font-bold'
                 : 'border-transparent text-[#8C7E70] hover:text-[#382F26]'
@@ -390,6 +424,219 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </div>
           )}
 
+          {/* TAB: INTERACTION & ROTATION SOUND */}
+          {activeTab === 'interaction' && (
+            <div className="space-y-6">
+              {/* Section 1: Rotation Sensitivity */}
+              <div className="p-4 rounded-2xl bg-[#F4EFEA] border border-[#E5DFD4] space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-xl bg-white border border-[#E0D7CC] flex items-center justify-center text-[#5A4D40] shadow-2xs">
+                      <Sliders className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h4 className="font-serif font-bold text-sm text-[#382F26]">
+                        触摸按住旋转灵敏度
+                      </h4>
+                      <p className="text-[11px] text-[#8C7E70]">
+                        控制按住手账便签、照片与视频手柄旋转时的角度跟手速率
+                      </p>
+                    </div>
+                  </div>
+                  <span className="px-2.5 py-1 rounded-full text-xs font-mono font-bold bg-white border border-[#DDD3C4] text-[#4A3F35] shadow-2xs">
+                    {(settings.rotationSensitivity ?? 1.0).toFixed(1)}x
+                  </span>
+                </div>
+
+                {/* Sensitivity Range Slider */}
+                <div className="space-y-2">
+                  <input
+                    type="range"
+                    min="0.5"
+                    max="2.0"
+                    step="0.1"
+                    value={settings.rotationSensitivity ?? 1.0}
+                    onChange={(e) => handleUpdateSensitivity(parseFloat(e.target.value))}
+                    className="w-full h-2 bg-[#D9CFC1] rounded-lg appearance-none cursor-pointer accent-[#4A3F35]"
+                  />
+                  <div className="flex justify-between text-[10px] text-[#9C8F80] px-0.5">
+                    <span>0.5x (精细微调)</span>
+                    <span>1.0x (标准自然)</span>
+                    <span>1.5x (敏捷响应)</span>
+                    <span>2.0x (快速旋转)</span>
+                  </div>
+                </div>
+
+                {/* Quick Presets */}
+                <div className="grid grid-cols-4 gap-2 pt-1">
+                  {[
+                    { label: '0.6x 精细', val: 0.6 },
+                    { label: '1.0x 标准', val: 1.0 },
+                    { label: '1.4x 敏捷', val: 1.4 },
+                    { label: '1.8x 极速', val: 1.8 },
+                  ].map((preset) => {
+                    const isSelected = Math.abs((settings.rotationSensitivity ?? 1.0) - preset.val) < 0.05;
+                    return (
+                      <button
+                        key={preset.val}
+                        type="button"
+                        onClick={() => handleUpdateSensitivity(preset.val)}
+                        className={`py-1.5 px-2 rounded-xl text-xs font-medium border transition-all ${
+                          isSelected
+                            ? 'bg-[#4A3F35] text-white border-[#4A3F35] shadow-xs'
+                            : 'bg-white hover:bg-[#EFE8DE] text-[#6E6152] border-[#DDD5C7]'
+                        }`}
+                      >
+                        {preset.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Section 2: Mechanical Rotation Tick Sound */}
+              <div className="p-4 rounded-2xl bg-[#F4EFEA] border border-[#E5DFD4] space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-xl bg-white border border-[#E0D7CC] flex items-center justify-center text-[#5A4D40] shadow-2xs">
+                      {settings.enableRotationSound ? (
+                        <Volume2 className="w-4 h-4 text-[#4B6B4B]" />
+                      ) : (
+                        <VolumeX className="w-4 h-4 text-[#A89C8F]" />
+                      )}
+                    </div>
+                    <div>
+                      <h4 className="font-serif font-bold text-sm text-[#382F26] flex items-center gap-1.5">
+                        <span>机械化旋转声音</span>
+                        {settings.enableRotationSound && (
+                          <span className="text-[10px] font-normal px-1.5 py-0.5 rounded bg-[#E4ECE3] text-[#3D663D] border border-[#CCDCCC]">
+                            已开启
+                          </span>
+                        )}
+                      </h4>
+                      <p className="text-[11px] text-[#8C7E70]">
+                        旋转手账便签纸、图片和视频时，模拟古典机械齿轮棘轮咔嗒声
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Toggle Switch */}
+                  <button
+                    type="button"
+                    onClick={handleToggleRotationSound}
+                    className={`w-12 h-6 rounded-full transition-colors relative flex items-center px-0.5 shrink-0 ${
+                      settings.enableRotationSound ? 'bg-[#4A3F35]' : 'bg-[#D9CFC1]'
+                    }`}
+                  >
+                    <div
+                      className={`w-5 h-5 rounded-full bg-white shadow-xs transform transition-transform ${
+                        settings.enableRotationSound ? 'translate-x-6' : 'translate-x-0'
+                      }`}
+                    />
+                  </button>
+                </div>
+
+                {/* Volume Slider (0 - 200) */}
+                <div className="space-y-3 pt-2 border-t border-[#E5DDD0]">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-medium text-[#4A3F35] flex items-center gap-1.5">
+                      <span>声音音量大小 (0 ~ 200)</span>
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-white border border-[#DDD3C4] text-[#4A3F35] shadow-2xs">
+                        {settings.rotationSoundVolume ?? 100}%
+                      </span>
+                      <button
+                        type="button"
+                        onClick={handleTestRotationSound}
+                        className="px-2.5 py-1 rounded-xl text-xs font-medium bg-white hover:bg-[#EFE8DE] text-[#4A3F35] border border-[#DDD5C7] flex items-center gap-1 transition-all active:scale-95 shadow-2xs"
+                        title="试听机械齿轮咔嗒声"
+                      >
+                        <Volume2 className="w-3.5 h-3.5 text-[#5A4D40]" />
+                        <span>试听音效</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  <input
+                    type="range"
+                    min="0"
+                    max="200"
+                    step="5"
+                    value={settings.rotationSoundVolume ?? 100}
+                    onChange={(e) => handleUpdateVolume(parseInt(e.target.value, 10))}
+                    className="w-full h-2 bg-[#D9CFC1] rounded-lg appearance-none cursor-pointer accent-[#4A3F35]"
+                  />
+
+                  <div className="flex justify-between text-[10px] text-[#9C8F80] px-0.5">
+                    <span>0 (静音)</span>
+                    <span>50 (柔和)</span>
+                    <span>100 (标准)</span>
+                    <span>150 (清脆)</span>
+                    <span>200 (最强倍音)</span>
+                  </div>
+
+                  {/* Volume quick presets */}
+                  <div className="grid grid-cols-5 gap-1.5 pt-1">
+                    {[
+                      { label: '0 静音', val: 0 },
+                      { label: '50 柔和', val: 50 },
+                      { label: '100 标准', val: 100 },
+                      { label: '150 清脆', val: 150 },
+                      { label: '200 最大', val: 200 },
+                    ].map((preset) => {
+                      const isSelected = (settings.rotationSoundVolume ?? 100) === preset.val;
+                      return (
+                        <button
+                          key={preset.val}
+                          type="button"
+                          onClick={() => {
+                            handleUpdateVolume(preset.val);
+                            playMechanicalTick(preset.val, true);
+                          }}
+                          className={`py-1 rounded-lg text-[11px] font-medium border transition-all text-center ${
+                            isSelected
+                              ? 'bg-[#4A3F35] text-white border-[#4A3F35] shadow-xs'
+                              : 'bg-white hover:bg-[#EFE8DE] text-[#6E6152] border-[#DDD5C7]'
+                          }`}
+                        >
+                          {preset.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              {/* Section 3: Magnetic Snap & Alignment */}
+              <div className="p-4 rounded-2xl bg-[#F4EFEA] border border-[#E5DFD4] space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="font-serif font-bold text-sm text-[#382F26]">
+                      磁吸角度与网格辅助
+                    </h4>
+                    <p className="text-[11px] text-[#8C7E70]">
+                      旋转时在 0°、90°、180° 等整角度自动轻微磁吸就位，拖动时按 12px 柔和对齐
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleToggleSnap}
+                    className={`w-12 h-6 rounded-full transition-colors relative flex items-center px-0.5 shrink-0 ${
+                      settings.snapToGrid ? 'bg-[#4A3F35]' : 'bg-[#D9CFC1]'
+                    }`}
+                  >
+                    <div
+                      className={`w-5 h-5 rounded-full bg-white shadow-xs transform transition-transform ${
+                        settings.snapToGrid ? 'translate-x-6' : 'translate-x-0'
+                      }`}
+                    />
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* TAB 2: STORAGE & DATA */}
           {activeTab === 'storage' && (
             <div className="space-y-6">
@@ -432,30 +679,34 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
               {/* Backup and Restore Actions */}
               <div className="space-y-3">
-                <h4 className="font-serif font-bold text-sm text-[#382F26]">备份与数据恢复</h4>
+                <div className="flex items-center justify-between">
+                  <h4 className="font-serif font-bold text-sm text-[#382F26]">手账导出与数据导入</h4>
+                  <span className="text-[11px] text-[#8C7E70]">支持单本手账与轻量/完整模式</span>
+                </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <button
                     type="button"
-                    onClick={handleExport}
-                    disabled={isExporting}
+                    id="btn-settings-open-export"
+                    onClick={handleOpenExportModal}
                     className="flex items-center justify-center gap-2 p-3 rounded-xl bg-[#FFFFFF] border border-[#DDD4C7] hover:border-[#8C7E70] text-xs font-medium text-[#382F26] shadow-xs transition-all active:scale-98"
                   >
                     <Download className="w-4 h-4 text-[#7D6F61]" />
-                    <span>{isExporting ? '导出中...' : '导出手账备份 (JSON)'}</span>
+                    <span>导出指定手账 (全部或轻量)</span>
                   </button>
 
                   <button
                     type="button"
+                    id="btn-settings-open-import"
                     onClick={handleImportClick}
-                    disabled={isImporting}
+                    disabled={isParsingFile}
                     className="flex items-center justify-center gap-2 p-3 rounded-xl bg-[#FFFFFF] border border-[#DDD4C7] hover:border-[#8C7E70] text-xs font-medium text-[#382F26] shadow-xs transition-all active:scale-98"
                   >
                     <Upload className="w-4 h-4 text-[#7D6F61]" />
-                    <span>{isImporting ? '恢复中...' : '导入手账备份文件'}</span>
+                    <span>{isParsingFile ? '解析文件中...' : '导入手账备份文件'}</span>
                   </button>
                 </div>
                 <p className="text-[11px] text-[#9E9082] leading-relaxed">
-                  导出功能将所有手账的排版坐标、文字便签与元数据生成结构化 JSON 备份。重新导入即可还原排版。
+                  可自选手账本导出；支持选择导出完整原始内容（含大图和视频文件），或导出文字、图片缩略图（含原文件链接）与视频预览图轻量包。
                 </p>
               </div>
 
@@ -566,6 +817,28 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Export Notebooks Modal */}
+      <ExportModal
+        isOpen={isExportModalOpen}
+        onClose={() => setIsExportModalOpen(false)}
+        showToast={showToast}
+      />
+
+      {/* Import Modal */}
+      <ImportModal
+        isOpen={isImportModalOpen}
+        backup={pendingBackup}
+        onClose={() => {
+          setIsImportModalOpen(false);
+          setPendingBackup(null);
+        }}
+        onImportSuccess={() => {
+          onDataImported();
+          onClose();
+        }}
+        showToast={showToast}
+      />
     </div>
   );
 };

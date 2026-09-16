@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { Plus, BookOpen, Settings, Sparkles, X } from 'lucide-react';
+import { Plus, BookOpen, Settings, Sparkles, X, Download } from 'lucide-react';
 import { Notebook } from '../types';
 import { NotebookCard } from './NotebookCard';
 import { ConfirmDialog } from './modals/ConfirmDialog';
+import { ExportModal } from './modals/ExportModal';
 
 interface NotebookShelfProps {
   notebooks: Notebook[];
@@ -10,6 +11,7 @@ interface NotebookShelfProps {
   onOpenNotebook: (id: string) => void;
   onDeleteNotebook: (id: string) => Promise<void>;
   onOpenSettings: () => void;
+  showToast?: (text: string, type?: 'success' | 'error' | 'info') => void;
 }
 
 export const NotebookShelf: React.FC<NotebookShelfProps> = ({
@@ -18,6 +20,7 @@ export const NotebookShelf: React.FC<NotebookShelfProps> = ({
   onOpenNotebook,
   onDeleteNotebook,
   onOpenSettings,
+  showToast = () => {},
 }) => {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [newTitle, setNewTitle] = useState('');
@@ -25,6 +28,12 @@ export const NotebookShelf: React.FC<NotebookShelfProps> = ({
 
   // Notebook deletion state
   const [notebookToDelete, setNotebookToDelete] = useState<Notebook | null>(null);
+
+  // Notebook export modal state
+  const [exportModalState, setExportModalState] = useState<{
+    isOpen: boolean;
+    notebookId?: string;
+  }>({ isOpen: false });
 
   const handleCreateSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -69,21 +78,22 @@ export const NotebookShelf: React.FC<NotebookShelfProps> = ({
               type="button"
               id="btn-open-settings"
               onClick={onOpenSettings}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/80 hover:bg-white border border-[#DDD4C7] text-[#4A3F35] text-xs sm:text-sm font-medium transition-all active:scale-95 shadow-2xs"
-              title="应用设置与视觉定制"
+              className="w-9 h-9 rounded-xl bg-white/80 hover:bg-white border border-[#DDD4C7] text-[#4A3F35] flex items-center justify-center transition-all active:scale-95 shadow-2xs"
+              title="应用设置与备份管理"
+              aria-label="设置"
             >
               <Settings className="w-4 h-4 text-[#7D6F61]" />
-              <span className="hidden sm:inline">设置</span>
             </button>
 
             <button
               type="button"
               id="btn-open-create-notebook"
               onClick={() => setIsCreateModalOpen(true)}
-              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#4A3F35] hover:bg-[#382F26] text-[#FAF8F5] text-xs sm:text-sm font-medium transition-all active:scale-95 shadow-sm"
+              className="w-9 h-9 rounded-xl bg-[#4A3F35] hover:bg-[#382F26] text-[#FAF8F5] flex items-center justify-center transition-all active:scale-95 shadow-sm"
+              title="新建手账"
+              aria-label="新建手账"
             >
-              <Plus className="w-4 h-4" />
-              <span>新建手账</span>
+              <Plus className="w-5 h-5 stroke-[2.5]" />
             </button>
           </div>
         </div>
@@ -126,6 +136,7 @@ export const NotebookShelf: React.FC<NotebookShelfProps> = ({
                   notebook={nb}
                   onOpen={onOpenNotebook}
                   onDeleteRequest={(target) => setNotebookToDelete(target)}
+                  onExportRequest={(target) => setExportModalState({ isOpen: true, notebookId: target.id })}
                 />
               ))}
             </div>
@@ -210,6 +221,14 @@ export const NotebookShelf: React.FC<NotebookShelfProps> = ({
         isDanger={true}
         onConfirm={handleConfirmDelete}
         onCancel={() => setNotebookToDelete(null)}
+      />
+
+      {/* Export Notebook Modal */}
+      <ExportModal
+        isOpen={exportModalState.isOpen}
+        initialNotebookId={exportModalState.notebookId}
+        onClose={() => setExportModalState({ isOpen: false })}
+        showToast={showToast}
       />
     </div>
   );
