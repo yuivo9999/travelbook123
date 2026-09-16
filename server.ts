@@ -40,6 +40,7 @@ async function startServer() {
         targetUrl.match(/video\/(\d+)/i);
 
       const videoId = match ? match[1] : '';
+      const mDouyinUrl = videoId ? `https://m.douyin.com/share/video/${videoId}` : finalUrl;
       const openEmbedUrl = videoId
         ? `https://open.douyin.com/player/video?vid=${videoId}`
         : finalUrl;
@@ -50,6 +51,7 @@ async function startServer() {
         originalUrl: targetUrl,
         finalUrl,
         videoId,
+        mDouyinUrl,
         openEmbedUrl,
         pcUrl,
       });
