@@ -4,6 +4,9 @@ import { ContentItem } from '../../types';
 import { getMedia } from '../../db/indexedDB';
 import { formatDuration, createSafeBlobUrl } from '../../utils/media';
 
+// Memory cache for video thumbnails & streams
+const videoMediaCache = new Map<string, { thumbUrl: string | null; videoBlobUrl: string | null; duration?: number }>();
+
 interface VideoItemProps {
   item: ContentItem;
   canvasWidth: number;
@@ -25,8 +28,6 @@ export const VideoItem: React.FC<VideoItemProps> = ({
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    let activeThumbUrl: string | null = null;
-    let activeVideoUrl: string | null = null;
     let isMounted = true;
 
     async function loadMediaData() {
@@ -34,23 +35,42 @@ export const VideoItem: React.FC<VideoItemProps> = ({
         setLoading(false);
         return;
       }
+
+      const cached = videoMediaCache.get(item.mediaId);
+      if (cached) {
+        setThumbUrl(cached.thumbUrl);
+        setVideoBlobUrl(cached.videoBlobUrl);
+        if (cached.duration) setDuration(cached.duration);
+        setLoading(false);
+        return;
+      }
+
       try {
         setLoading(true);
         const media = await getMedia(item.mediaId);
         if (media && isMounted) {
           if (media.duration) setDuration(media.duration);
 
+          let activeThumb: string | null = null;
+          let activeVideo: string | null = null;
+
           // 1. Try thumbnail image
           if (media.thumbnailBlob) {
-            activeThumbUrl = createSafeBlobUrl(media.thumbnailBlob, 'image/jpeg');
-            setThumbUrl(activeThumbUrl);
+            activeThumb = createSafeBlobUrl(media.thumbnailBlob, 'image/jpeg');
+            setThumbUrl(activeThumb);
           }
 
           // 2. Prepare video stream url for preview or playback fallback
           if (media.blob) {
-            activeVideoUrl = createSafeBlobUrl(media.blob, media.mimeType || 'video/mp4');
-            setVideoBlobUrl(activeVideoUrl);
+            activeVideo = createSafeBlobUrl(media.blob, media.mimeType || 'video/mp4');
+            setVideoBlobUrl(activeVideo);
           }
+
+          videoMediaCache.set(item.mediaId, {
+            thumbUrl: activeThumb,
+            videoBlobUrl: activeVideo,
+            duration: media.duration,
+          });
         }
       } catch (e) {
         console.error('加载视频信息失败', e);
@@ -63,12 +83,6 @@ export const VideoItem: React.FC<VideoItemProps> = ({
 
     return () => {
       isMounted = false;
-      if (activeThumbUrl && activeThumbUrl.startsWith('blob:')) {
-        URL.revokeObjectURL(activeThumbUrl);
-      }
-      if (activeVideoUrl && activeVideoUrl.startsWith('blob:')) {
-        URL.revokeObjectURL(activeVideoUrl);
-      }
     };
   }, [item.mediaId]);
 

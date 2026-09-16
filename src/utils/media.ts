@@ -81,10 +81,22 @@ export async function processImageFile(file: File | Blob, maxWidth = 640): Promi
       return;
     }
 
+    let isSettled = false;
+    // 2s safety timer: ensures promise NEVER hangs on unexpected browser image load issues
+    const safetyTimer = window.setTimeout(() => {
+      if (isSettled) return;
+      isSettled = true;
+      try { URL.revokeObjectURL(objectUrl); } catch {}
+      resolve({ thumbnailBlob: rawBlob as Blob, width: 400, height: 300 });
+    }, 2000);
+
     const img = new Image();
 
     img.onload = () => {
-      URL.revokeObjectURL(objectUrl);
+      if (isSettled) return;
+      isSettled = true;
+      clearTimeout(safetyTimer);
+      try { URL.revokeObjectURL(objectUrl); } catch {}
 
       const originalWidth = img.naturalWidth || img.width || 400;
       const originalHeight = img.naturalHeight || img.height || 300;
@@ -110,7 +122,12 @@ export async function processImageFile(file: File | Blob, maxWidth = 640): Promi
 
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = 'high';
-      ctx.drawImage(img, 0, 0, targetWidth, targetHeight);
+      try {
+        ctx.drawImage(img, 0, 0, targetWidth, targetHeight);
+      } catch {
+        resolve({ thumbnailBlob: rawBlob as Blob, width: originalWidth, height: originalHeight });
+        return;
+      }
 
       // Try webp first, then jpeg
       canvas.toBlob(
@@ -137,7 +154,10 @@ export async function processImageFile(file: File | Blob, maxWidth = 640): Promi
     };
 
     img.onerror = () => {
-      URL.revokeObjectURL(objectUrl);
+      if (isSettled) return;
+      isSettled = true;
+      clearTimeout(safetyTimer);
+      try { URL.revokeObjectURL(objectUrl); } catch {}
       // Graceful fallback: do not throw or reject, preserve the original image!
       resolve({ thumbnailBlob: rawBlob as Blob, width: 400, height: 300 });
     };
@@ -160,7 +180,7 @@ export async function processVideoFile(file: File | Blob): Promise<VideoProcessR
     const video = document.createElement('video');
     video.muted = true;
     video.playsInline = true;
-    video.preload = 'auto'; // Must be 'auto' to ensure video frames buffer for seek
+    video.preload = 'metadata'; // Fast metadata reading
     video.src = objectUrl;
 
     let timeoutId: number;
@@ -170,12 +190,18 @@ export async function processVideoFile(file: File | Blob): Promise<VideoProcessR
       if (isResolved) return;
       isResolved = true;
       clearTimeout(timeoutId);
-      URL.revokeObjectURL(objectUrl);
+      try { URL.revokeObjectURL(objectUrl); } catch {}
       video.removeAttribute('src');
       video.load();
     };
 
+    const finish = (result: VideoProcessResult) => {
+      cleanup();
+      resolve(result);
+    };
+
     const captureCurrentFrame = (width: number, height: number): Blob | null => {
+      if (!width || !height || width <= 0 || height <= 0) return null;
       try {
         const maxWidth = 540;
         let targetWidth = width;
@@ -195,8 +221,7 @@ export async function processVideoFile(file: File | Blob): Promise<VideoProcessR
         if (ctx) {
           ctx.drawImage(video, 0, 0, targetWidth, targetHeight);
           const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
-          const blob = ensureBlob(dataUrl, 'image/jpeg');
-          return blob;
+          return ensureBlob(dataUrl, 'image/jpeg');
         }
       } catch (err) {
         console.warn('Canvas frame capture failed', err);
@@ -204,34 +229,39 @@ export async function processVideoFile(file: File | Blob): Promise<VideoProcessR
       return null;
     };
 
-    // 4s timeout fallback
+    // 1.5s timeout fallback: never keep user waiting long for video adding
     timeoutId = window.setTimeout(() => {
       if (isResolved) return;
       const duration = isFinite(video.duration) ? video.duration : 0;
       const originalWidth = video.videoWidth || 320;
       const originalHeight = video.videoHeight || 240;
-      const frameBlob = captureCurrentFrame(originalWidth, originalHeight);
-      cleanup();
-      resolve({
+      const frameBlob = (originalWidth > 0 && originalHeight > 0)
+        ? captureCurrentFrame(originalWidth, originalHeight)
+        : null;
+      finish({
         thumbnailBlob: frameBlob,
         duration,
         width: originalWidth,
         height: originalHeight,
       });
-    }, 4000);
+    }, 1500);
 
     const onDataReady = () => {
       const duration = isFinite(video.duration) ? video.duration : 0;
       const originalWidth = video.videoWidth || 320;
       const originalHeight = video.videoHeight || 240;
 
-      // Try seeking to 0.1s or 0.5s for poster
+      if (originalWidth <= 0 || originalHeight <= 0) {
+        // Wait a tick or fallback
+        return;
+      }
+
+      // Try seeking to 0.1s for poster
       const seekTime = duration > 1 ? 0.3 : 0.05;
 
       const handleSeeked = () => {
         const frameBlob = captureCurrentFrame(originalWidth, originalHeight);
-        cleanup();
-        resolve({
+        finish({
           thumbnailBlob: frameBlob,
           duration,
           width: originalWidth,
@@ -245,8 +275,7 @@ export async function processVideoFile(file: File | Blob): Promise<VideoProcessR
         video.currentTime = seekTime;
       } catch {
         const frameBlob = captureCurrentFrame(originalWidth, originalHeight);
-        cleanup();
-        resolve({
+        finish({
           thumbnailBlob: frameBlob,
           duration,
           width: originalWidth,
@@ -256,10 +285,14 @@ export async function processVideoFile(file: File | Blob): Promise<VideoProcessR
     };
 
     video.addEventListener('loadeddata', onDataReady, { once: true });
+    video.addEventListener('loadedmetadata', () => {
+      if (video.videoWidth > 0 && video.videoHeight > 0) {
+        onDataReady();
+      }
+    }, { once: true });
 
     video.onerror = () => {
-      cleanup();
-      resolve({
+      finish({
         thumbnailBlob: null,
         duration: 0,
         width: 320,

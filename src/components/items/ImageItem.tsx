@@ -4,6 +4,9 @@ import { ContentItem } from '../../types';
 import { getMedia } from '../../db/indexedDB';
 import { createSafeBlobUrl } from '../../utils/media';
 
+// In-memory cache for media URLs so items don't flicker or get revoked during re-renders/dragging
+const mediaUrlCache = new Map<string, string>();
+
 interface ImageItemProps {
   item: ContentItem;
   canvasWidth: number;
@@ -24,7 +27,6 @@ export const ImageItem: React.FC<ImageItemProps> = ({
   const [hasError, setHasError] = useState(false);
 
   useEffect(() => {
-    let activeUrl: string | null = null;
     let isMounted = true;
 
     async function loadThumb() {
@@ -32,14 +34,28 @@ export const ImageItem: React.FC<ImageItemProps> = ({
         setLoading(false);
         return;
       }
+
+      // Check cache first for instant rendering
+      const cached = mediaUrlCache.get(item.mediaId);
+      if (cached) {
+        setThumbUrl(cached);
+        setLoading(false);
+        return;
+      }
+
       try {
         setLoading(true);
         setHasError(false);
         const media = await getMedia(item.mediaId);
         if (media && isMounted) {
           const blobToUse = media.thumbnailBlob || media.blob;
-          activeUrl = createSafeBlobUrl(blobToUse, media.mimeType || 'image/jpeg');
-          setThumbUrl(activeUrl);
+          const url = createSafeBlobUrl(blobToUse, media.mimeType || 'image/jpeg');
+          if (url) {
+            mediaUrlCache.set(item.mediaId, url);
+            setThumbUrl(url);
+          } else {
+            setHasError(true);
+          }
         } else if (!media && isMounted) {
           setHasError(true);
         }
@@ -55,9 +71,6 @@ export const ImageItem: React.FC<ImageItemProps> = ({
 
     return () => {
       isMounted = false;
-      if (activeUrl && activeUrl.startsWith('blob:')) {
-        URL.revokeObjectURL(activeUrl);
-      }
     };
   }, [item.mediaId]);
 

@@ -38,9 +38,9 @@ export const AddContentModal: React.FC<AddContentModalProps> = ({
   };
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      onSelectImage(file);
+    const files = Array.from(e.target.files || []);
+    if (files.length > 0) {
+      files.forEach((file) => onSelectImage(file));
       handleClose();
     }
     // reset input value so re-selecting the same file triggers change
@@ -48,9 +48,9 @@ export const AddContentModal: React.FC<AddContentModalProps> = ({
   };
 
   const handleVideoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      onSelectVideo(file);
+    const files = Array.from(e.target.files || []);
+    if (files.length > 0) {
+      files.forEach((file) => onSelectVideo(file));
       handleClose();
     }
     if (videoInputRef.current) videoInputRef.current.value = '';
@@ -71,18 +71,20 @@ export const AddContentModal: React.FC<AddContentModalProps> = ({
       role="dialog"
       aria-modal="true"
     >
-      {/* Hidden file inputs */}
+      {/* Hidden file inputs with comprehensive MIME types */}
       <input
         ref={imageInputRef}
         type="file"
-        accept="image/*"
+        multiple
+        accept="image/*,.jpg,.jpeg,.png,.gif,.webp,.heic,.bmp,.svg"
         className="hidden"
         onChange={handleImageChange}
       />
       <input
         ref={videoInputRef}
         type="file"
-        accept="video/*"
+        multiple
+        accept="video/*,.mp4,.mov,.webm,.m4v,.ogv,.avi,.mkv"
         className="hidden"
         onChange={handleVideoChange}
       />
@@ -107,45 +109,56 @@ export const AddContentModal: React.FC<AddContentModalProps> = ({
         </div>
 
         {activeTab === 'menu' ? (
-          <div className="grid grid-cols-3 gap-3 py-5">
-            {/* Add text */}
-            <button
-              type="button"
-              id="btn-add-text"
-              onClick={() => setActiveTab('text')}
-              className="flex flex-col items-center justify-center gap-2.5 p-4 rounded-2xl bg-[#F4EFE7] hover:bg-[#EFE8DD] border border-[#E3DBD0] text-[#3D342B] transition-all active:scale-95 group"
-            >
-              <div className="w-12 h-12 rounded-xl bg-[#FFF9E6] border border-[#E6DDCA] shadow-xs flex items-center justify-center text-[#6E5936] group-hover:scale-105 transition-transform">
-                <Type className="w-6 h-6" />
-              </div>
-              <span className="text-xs font-semibold">文字纸片</span>
-            </button>
+          <div>
+            <div className="grid grid-cols-3 gap-3 py-5">
+              {/* Add text */}
+              <button
+                type="button"
+                id="btn-add-text"
+                onClick={() => setActiveTab('text')}
+                className="flex flex-col items-center justify-center gap-2.5 p-4 rounded-2xl bg-[#F4EFE7] hover:bg-[#EFE8DD] border border-[#E3DBD0] text-[#3D342B] transition-all active:scale-95 group"
+              >
+                <div className="w-12 h-12 rounded-xl bg-[#FFF9E6] border border-[#E6DDCA] shadow-xs flex items-center justify-center text-[#6E5936] group-hover:scale-105 transition-transform">
+                  <Type className="w-6 h-6" />
+                </div>
+                <span className="text-xs font-semibold">文字纸片</span>
+              </button>
 
-            {/* Add image */}
-            <button
-              type="button"
-              id="btn-add-image"
-              onClick={() => imageInputRef.current?.click()}
-              className="flex flex-col items-center justify-center gap-2.5 p-4 rounded-2xl bg-[#F4EFE7] hover:bg-[#EFE8DD] border border-[#E3DBD0] text-[#3D342B] transition-all active:scale-95 group"
-            >
-              <div className="w-12 h-12 rounded-xl bg-[#FFFFFF] border border-[#E5DFD5] shadow-xs flex items-center justify-center text-[#4B5E4B] group-hover:scale-105 transition-transform">
-                <ImageIcon className="w-6 h-6" />
-              </div>
-              <span className="text-xs font-semibold">选择照片</span>
-            </button>
+              {/* Add image */}
+              <button
+                type="button"
+                id="btn-add-image"
+                onClick={() => imageInputRef.current?.click()}
+                className="flex flex-col items-center justify-center gap-2.5 p-4 rounded-2xl bg-[#F4EFE7] hover:bg-[#EFE8DD] border border-[#E3DBD0] text-[#3D342B] transition-all active:scale-95 group"
+              >
+                <div className="w-12 h-12 rounded-xl bg-[#FFFFFF] border border-[#E5DFD5] shadow-xs flex items-center justify-center text-[#4B5E4B] group-hover:scale-105 transition-transform">
+                  <ImageIcon className="w-6 h-6" />
+                </div>
+                <span className="text-xs font-semibold">选择照片</span>
+              </button>
 
-            {/* Add video */}
-            <button
-              type="button"
-              id="btn-add-video"
-              onClick={() => videoInputRef.current?.click()}
-              className="flex flex-col items-center justify-center gap-2.5 p-4 rounded-2xl bg-[#F4EFE7] hover:bg-[#EFE8DD] border border-[#E3DBD0] text-[#3D342B] transition-all active:scale-95 group"
-            >
-              <div className="w-12 h-12 rounded-xl bg-[#FBF5ED] border border-[#E6DACB] shadow-xs flex items-center justify-center text-[#7C4A3A] group-hover:scale-105 transition-transform">
-                <VideoIcon className="w-6 h-6" />
-              </div>
-              <span className="text-xs font-semibold">本地视频</span>
-            </button>
+              {/* Add video */}
+              <button
+                type="button"
+                id="btn-add-video"
+                onClick={() => videoInputRef.current?.click()}
+                className="flex flex-col items-center justify-center gap-2.5 p-4 rounded-2xl bg-[#F4EFE7] hover:bg-[#EFE8DD] border border-[#E3DBD0] text-[#3D342B] transition-all active:scale-95 group"
+              >
+                <div className="w-12 h-12 rounded-xl bg-[#FBF5ED] border border-[#E6DACB] shadow-xs flex items-center justify-center text-[#7C4A3A] group-hover:scale-105 transition-transform">
+                  <VideoIcon className="w-6 h-6" />
+                </div>
+                <span className="text-xs font-semibold">本地视频</span>
+              </button>
+            </div>
+
+            {/* Quick tips */}
+            <div className="rounded-xl bg-[#F0EAE1]/70 border border-[#E4DCcf] p-3 text-[11px] text-[#6E6356] leading-relaxed flex flex-col gap-1">
+              <span className="font-semibold text-[#4A3F35] flex items-center gap-1.5">
+                💡 便捷贴图小窍门：
+              </span>
+              <p>• <b>剪贴板粘贴：</b>支持复制图片后直接在手账页面按 <kbd className="px-1 py-0.5 rounded bg-[#FAF7F2] border border-[#DDD4C7] font-mono text-[10px]">Ctrl+V</kbd> 贴入。</p>
+              <p>• <b>拖拽贴入：</b>直接从电脑文件夹将照片或视频拖入纸张。</p>
+            </div>
           </div>
         ) : (
           <div className="flex flex-col gap-4 py-4">

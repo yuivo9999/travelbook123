@@ -10,6 +10,10 @@ import {
   ChevronDown,
   Settings,
   Image as ImageIcon,
+  Video as VideoIcon,
+  Film,
+  Type,
+  Upload,
 } from 'lucide-react';
 import { Notebook, ContentItem, MediaRecord } from '../types';
 import {
@@ -21,6 +25,24 @@ import {
   saveNotebook,
 } from '../db/indexedDB';
 import { processImageFile, processVideoFile } from '../utils/media';
+
+function inferMimeType(file: File, defaultType: string): string {
+  if (file.type && file.type.trim().length > 0) return file.type;
+  const name = file.name || '';
+  const ext = name.split('.').pop()?.toLowerCase();
+  if (ext === 'png') return 'image/png';
+  if (ext === 'jpg' || ext === 'jpeg') return 'image/jpeg';
+  if (ext === 'webp') return 'image/webp';
+  if (ext === 'gif') return 'image/gif';
+  if (ext === 'svg') return 'image/svg+xml';
+  if (ext === 'bmp') return 'image/bmp';
+  if (ext === 'mp4') return 'video/mp4';
+  if (ext === 'mov') return 'video/quicktime';
+  if (ext === 'webm') return 'video/webm';
+  if (ext === 'm4v') return 'video/mp4';
+  if (ext === 'ogv') return 'video/ogg';
+  return defaultType;
+}
 import { TextItem } from './items/TextItem';
 import { ImageItem } from './items/ImageItem';
 import { VideoItem } from './items/VideoItem';
@@ -73,6 +95,10 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
   const canvasRef = useRef<HTMLDivElement>(null);
   const [canvasWidth, setCanvasWidth] = useState(window.innerWidth);
 
+  // Hidden file inputs for direct one-click uploading
+  const directImageInputRef = useRef<HTMLInputElement>(null);
+  const directVideoInputRef = useRef<HTMLInputElement>(null);
+
   // Track max zIndex
   const maxZIndexRef = useRef(10);
 
@@ -109,6 +135,19 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
     loadItems();
   }, [loadItems]);
 
+  // Prevent browser default file open behavior across the entire window
+  useEffect(() => {
+    const preventDefaults = (e: DragEvent) => {
+      e.preventDefault();
+    };
+    window.addEventListener('dragover', preventDefaults);
+    window.addEventListener('drop', preventDefaults);
+    return () => {
+      window.removeEventListener('dragover', preventDefaults);
+      window.removeEventListener('drop', preventDefaults);
+    };
+  }, []);
+
   // Monitor canvas width for responsive bounds
   useEffect(() => {
     const updateWidth = () => {
@@ -123,9 +162,42 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
     return () => window.removeEventListener('resize', updateWidth);
   }, []);
 
-  // Global paste handler for pasting screenshots or copied images
+  // Forward refs for media handlers to guarantee fresh closures inside global event listeners
+  const handleAddImageRef = useRef<(file: File) => Promise<void>>(() => Promise.resolve());
+  const handleAddVideoRef = useRef<(file: File) => Promise<void>>(() => Promise.resolve());
+
+  // Global paste handler for pasting screenshots, copied photos or video files
   useEffect(() => {
     const handlePaste = async (e: ClipboardEvent) => {
+      const activeTag = document.activeElement?.tagName?.toLowerCase();
+      if (
+        activeTag === 'input' ||
+        activeTag === 'textarea' ||
+        (document.activeElement as HTMLElement)?.isContentEditable
+      ) {
+        return;
+      }
+
+      // Check clipboard files first (from OS file manager or screenshot tools)
+      const files = Array.from(e.clipboardData?.files || []);
+      if (files.length > 0) {
+        let hasMedia = false;
+        for (const file of files) {
+          const mime = inferMimeType(file, '');
+          if (mime.startsWith('image/') || file.type.startsWith('image/')) {
+            hasMedia = true;
+            e.preventDefault();
+            await handleAddImageRef.current(file);
+          } else if (mime.startsWith('video/') || file.type.startsWith('video/')) {
+            hasMedia = true;
+            e.preventDefault();
+            await handleAddVideoRef.current(file);
+          }
+        }
+        if (hasMedia) return;
+      }
+
+      // Check clipboard items (standard browser clipboard image/video copy)
       const items = e.clipboardData?.items;
       if (!items) return;
 
@@ -135,8 +207,14 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
           const file = item.getAsFile();
           if (file) {
             e.preventDefault();
-            showToast('正在贴入剪贴板中的图片...', 'info');
-            await handleAddImage(file);
+            await handleAddImageRef.current(file);
+            return;
+          }
+        } else if (item.type.startsWith('video/')) {
+          const file = item.getAsFile();
+          if (file) {
+            e.preventDefault();
+            await handleAddVideoRef.current(file);
             return;
           }
         }
@@ -145,7 +223,7 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
 
     window.addEventListener('paste', handlePaste);
     return () => window.removeEventListener('paste', handlePaste);
-  }, [notebook.id]);
+  }, []);
 
   // Update paper pattern
   const handlePatternChange = async (pattern: PaperStyle) => {
@@ -244,7 +322,8 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
   // 2. Add image item
   const handleAddImage = async (file: File) => {
     try {
-      showToast('正在处理图片并生成缩略图...', 'info');
+      showToast('正在处理照片并贴入手账...', 'info');
+      const mime = inferMimeType(file, 'image/jpeg');
       const { thumbnailBlob, width, height } = await processImageFile(file);
 
       const mediaId = 'media_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
@@ -252,12 +331,12 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
         id: mediaId,
         notebookId: notebook.id,
         type: 'image',
-        mimeType: file.type || 'image/jpeg',
+        mimeType: mime,
         blob: file,
         thumbnailBlob,
         width,
         height,
-        fileName: file.name,
+        fileName: file.name || 'image.jpg',
         fileSize: file.size,
         createdAt: Date.now(),
       };
@@ -296,21 +375,23 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
         onUpdateNotebook(updated);
       }
 
-      showToast('已贴上照片', 'success');
+      showToast('已成功贴上照片', 'success');
 
       if (y > window.scrollY + window.innerHeight - 200) {
         window.scrollTo({ top: y - 100, behavior: 'smooth' });
       }
     } catch (err) {
-      console.error(err);
+      console.error('添加图片失败', err);
       showToast(err instanceof Error ? err.message : '添加图片失败', 'error');
     }
   };
+  handleAddImageRef.current = handleAddImage;
 
   // 3. Add video item
   const handleAddVideo = async (file: File) => {
     try {
-      showToast('正在解析本地视频并提取画面帧...', 'info');
+      showToast('正在解析视频并生成手账卡片...', 'info');
+      const mime = inferMimeType(file, 'video/mp4');
       const { thumbnailBlob, duration, width, height } = await processVideoFile(file);
 
       const mediaId = 'media_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
@@ -318,13 +399,13 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
         id: mediaId,
         notebookId: notebook.id,
         type: 'video',
-        mimeType: file.type || 'video/mp4',
+        mimeType: mime,
         blob: file,
         thumbnailBlob: thumbnailBlob || undefined,
         duration,
         width,
         height,
-        fileName: file.name,
+        fileName: file.name || 'video.mp4',
         fileSize: file.size,
         createdAt: Date.now(),
       };
@@ -354,16 +435,17 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
 
       await saveItem(newItem);
       setItems((prev) => [...prev, newItem]);
-      showToast('已贴上视频剪辑', 'success');
+      showToast('已成功贴上视频剪辑', 'success');
 
       if (y > window.scrollY + window.innerHeight - 200) {
         window.scrollTo({ top: y - 100, behavior: 'smooth' });
       }
     } catch (err) {
-      console.error(err);
+      console.error('添加视频失败', err);
       showToast(err instanceof Error ? err.message : '添加视频失败', 'error');
     }
   };
+  handleAddVideoRef.current = handleAddVideo;
 
   // Update text content
   const handleUpdateText = async (id: string, newText: string) => {
@@ -534,10 +616,64 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
             </div>
           </div>
 
-          {/* Right: Paper Pattern Toggle & Settings & + Add Content */}
+          {/* Right: Paper Pattern Toggle & Settings & Quick Media Buttons & + Add Content */}
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+            {/* Hidden file inputs for direct one-click uploading */}
+            <input
+              ref={directImageInputRef}
+              type="file"
+              multiple
+              accept="image/*,.jpg,.jpeg,.png,.gif,.webp,.heic,.bmp,.svg"
+              className="hidden"
+              onChange={async (e) => {
+                const files = Array.from(e.target.files || []) as File[];
+                for (const f of files) {
+                  await handleAddImage(f);
+                }
+                e.target.value = '';
+              }}
+            />
+            <input
+              ref={directVideoInputRef}
+              type="file"
+              multiple
+              accept="video/*,.mp4,.mov,.webm,.m4v,.ogv,.avi,.mkv"
+              className="hidden"
+              onChange={async (e) => {
+                const files = Array.from(e.target.files || []) as File[];
+                for (const f of files) {
+                  await handleAddVideo(f);
+                }
+                e.target.value = '';
+              }}
+            />
+
+            {/* Quick Photo Upload Button */}
+            <button
+              type="button"
+              id="btn-quick-add-photo"
+              onClick={() => directImageInputRef.current?.click()}
+              className="flex items-center gap-1 px-2.5 sm:px-3 py-1.5 rounded-xl bg-[#FAF6F0] hover:bg-[#F2ECE1] border border-[#DDD4C7] text-[#4A3F35] text-xs font-medium transition-all active:scale-95 shadow-2xs"
+              title="快速选择并贴入本地照片 (也支持 Ctrl+V 直接粘贴)"
+            >
+              <ImageIcon className="w-3.5 h-3.5 text-[#5C6E5C]" />
+              <span className="hidden xs:inline">贴照片</span>
+            </button>
+
+            {/* Quick Video Upload Button */}
+            <button
+              type="button"
+              id="btn-quick-add-video"
+              onClick={() => directVideoInputRef.current?.click()}
+              className="flex items-center gap-1 px-2.5 sm:px-3 py-1.5 rounded-xl bg-[#FAF6F0] hover:bg-[#F2ECE1] border border-[#DDD4C7] text-[#4A3F35] text-xs font-medium transition-all active:scale-95 shadow-2xs"
+              title="快速选择并贴入本地视频"
+            >
+              <VideoIcon className="w-3.5 h-3.5 text-[#8C4E3D]" />
+              <span className="hidden xs:inline">贴视频</span>
+            </button>
+
             {/* Paper pattern selector: quick compact selector */}
-            <div className="flex items-center bg-[#EFE9E0] p-0.5 rounded-xl border border-[#E0D7CC] text-xs">
+            <div className="hidden sm:flex items-center bg-[#EFE9E0] p-0.5 rounded-xl border border-[#E0D7CC] text-xs">
               <select
                 value={paperPattern}
                 onChange={(e) => handlePatternChange(e.target.value as PaperStyle)}
@@ -600,9 +736,10 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
             if (files.length === 0) return;
 
             for (const file of files) {
-              if (file.type.startsWith('image/')) {
+              const mime = inferMimeType(file, '');
+              if (mime.startsWith('image/') || file.type.startsWith('image/')) {
                 await handleAddImage(file);
-              } else if (file.type.startsWith('video/')) {
+              } else if (mime.startsWith('video/') || file.type.startsWith('video/')) {
                 await handleAddVideo(file);
               } else {
                 showToast(`不支持的文件类型: ${file.name}`, 'error');
@@ -638,30 +775,66 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
 
             <div className="text-[11px] text-[#A09384] pt-2 sm:pt-0">
               {items.length === 0
-                ? '空白手账页 · 点击右上角添加内容'
+                ? '空白手账页 · 点击上方按钮或拖拽贴入图片/视频'
                 : `共 ${items.length} 份手账剪贴 · 拖拽上方胶带自由摆放`}
             </div>
           </div>
 
-          {/* Empty Prompt if no items yet */}
+          {/* Empty Prompt with direct clickable actions if no items yet */}
           {items.length === 0 && !loading && (
-            <div className="flex flex-col items-center justify-center py-24 px-6 text-center max-w-sm mx-auto pointer-events-auto">
+            <div className="flex flex-col items-center justify-center py-20 px-6 text-center max-w-md mx-auto pointer-events-auto">
               <div className="w-14 h-14 rounded-2xl bg-[#F0EAE1] border border-[#E0D7CC] flex items-center justify-center text-[#827363] mb-3.5 shadow-xs">
                 <Sparkles className="w-7 h-7 opacity-80" />
               </div>
               <h3 className="text-base font-semibold text-[#3D342B] mb-1">这本手账还是空白的</h3>
-              <p className="text-xs text-[#807466] leading-relaxed mb-5">
-                点击上方“+ 添加内容”，随手贴入收集到的攻略文字、实景照片或生活视频。
+              <p className="text-xs text-[#807466] leading-relaxed mb-6">
+                随时贴入旅途实景照片、视频剪辑或随手笔记，记录专属瞬间。
               </p>
-              <button
-                type="button"
-                id="btn-paper-first-add"
-                onClick={() => setIsAddModalOpen(true)}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#594B3D] hover:bg-[#43372B] text-white text-xs font-medium shadow-sm transition-all active:scale-95"
-              >
-                <Plus className="w-4 h-4" />
-                <span>贴入第一段资料</span>
-              </button>
+
+              {/* 3 Quick action cards */}
+              <div className="grid grid-cols-3 gap-2.5 w-full mb-5">
+                <button
+                  type="button"
+                  onClick={() => directImageInputRef.current?.click()}
+                  className="flex flex-col items-center justify-center gap-2 p-3.5 rounded-2xl bg-[#F7F2EA] hover:bg-[#EFE7DC] border border-[#E3DBD0] text-[#3D342B] transition-all active:scale-95 shadow-2xs group"
+                >
+                  <div className="w-10 h-10 rounded-xl bg-white border border-[#E0D6C8] flex items-center justify-center text-[#4B5E4B] group-hover:scale-105 transition-transform">
+                    <ImageIcon className="w-5 h-5" />
+                  </div>
+                  <span className="text-xs font-semibold">贴入照片</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => directVideoInputRef.current?.click()}
+                  className="flex flex-col items-center justify-center gap-2 p-3.5 rounded-2xl bg-[#F7F2EA] hover:bg-[#EFE7DC] border border-[#E3DBD0] text-[#3D342B] transition-all active:scale-95 shadow-2xs group"
+                >
+                  <div className="w-10 h-10 rounded-xl bg-[#FAF0E6] border border-[#E6D4C2] flex items-center justify-center text-[#8C4E3D] group-hover:scale-105 transition-transform">
+                    <VideoIcon className="w-5 h-5" />
+                  </div>
+                  <span className="text-xs font-semibold">贴入视频</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setIsAddModalOpen(true)}
+                  className="flex flex-col items-center justify-center gap-2 p-3.5 rounded-2xl bg-[#F7F2EA] hover:bg-[#EFE7DC] border border-[#E3DBD0] text-[#3D342B] transition-all active:scale-95 shadow-2xs group"
+                >
+                  <div className="w-10 h-10 rounded-xl bg-[#FFF9E6] border border-[#E5DECD] flex items-center justify-center text-[#6E5936] group-hover:scale-105 transition-transform">
+                    <Type className="w-5 h-5" />
+                  </div>
+                  <span className="text-xs font-semibold">文字纸片</span>
+                </button>
+              </div>
+
+              {/* Tips banner */}
+              <div className="w-full rounded-xl bg-[#EFE9DF]/80 border border-[#DFD6C9] p-3 text-[11px] text-[#6E6356] leading-relaxed text-left flex flex-col gap-1">
+                <span className="font-semibold text-[#4A3F35] flex items-center gap-1">
+                  💡 快捷贴入技巧：
+                </span>
+                <p>• <b>剪贴板粘贴：</b>复制照片或截图后，直接在页面上按 <kbd className="px-1 py-0.5 rounded bg-[#FAF7F2] border border-[#DDD4C7] font-mono text-[10px]">Ctrl+V</kbd> 即可贴入。</p>
+                <p>• <b>拖拽文件：</b>从桌面或文件夹将多张照片/视频直接拖进这页纸张。</p>
+              </div>
             </div>
           )}
 

@@ -1,7 +1,7 @@
 import { Notebook, ContentItem, MediaRecord } from '../types';
 
 const DB_NAME = 'DigitalNotebookDB';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 let dbInstance: IDBDatabase | null = null;
 
@@ -39,6 +39,13 @@ export function openDatabase(): Promise<IDBDatabase> {
 
     request.onsuccess = (event) => {
       dbInstance = (event.target as IDBOpenDBRequest).result;
+      dbInstance.onversionchange = () => {
+        dbInstance?.close();
+        dbInstance = null;
+      };
+      dbInstance.onclose = () => {
+        dbInstance = null;
+      };
       resolve(dbInstance);
     };
 
@@ -244,24 +251,61 @@ export async function deleteItem(id: string, mediaId?: string): Promise<void> {
 export async function saveMedia(media: MediaRecord): Promise<void> {
   const db = await openDatabase();
   return new Promise((resolve, reject) => {
-    const tx = db.transaction('media', 'readwrite');
-    const store = tx.objectStore('media');
-    const request = store.put(media);
+    try {
+      const tx = db.transaction('media', 'readwrite');
+      const store = tx.objectStore('media');
 
-    request.onsuccess = () => resolve();
-    request.onerror = () => reject(new Error('保存媒体数据失败'));
+      // Ensure blobs are clean clonable standard Blobs (native File objects can fail structured clone in sandboxed iframes)
+      const cleanBlob = media.blob instanceof Blob
+        ? media.blob.slice(0, media.blob.size, media.mimeType || 'application/octet-stream')
+        : media.blob;
+
+      const cleanThumb = media.thumbnailBlob instanceof Blob
+        ? media.thumbnailBlob.slice(0, media.thumbnailBlob.size, 'image/jpeg')
+        : media.thumbnailBlob;
+
+      const cleanRecord: MediaRecord = {
+        ...media,
+        blob: cleanBlob,
+        thumbnailBlob: cleanThumb,
+      };
+
+      const request = store.put(cleanRecord);
+
+      request.onsuccess = () => resolve();
+      request.onerror = () => {
+        console.error('IndexedDB saveMedia request failed:', request.error);
+        reject(new Error(`保存媒体数据失败: ${request.error?.message || '未知错误'}`));
+      };
+      tx.onerror = () => {
+        console.error('IndexedDB saveMedia tx failed:', tx.error);
+        reject(new Error(`保存媒体事务失败: ${tx.error?.message || '存储空间不足或格式受限'}`));
+      };
+      tx.onabort = () => {
+        console.error('IndexedDB saveMedia tx aborted:', tx.error);
+        reject(new Error(`保存媒体被中止: ${tx.error?.message || '浏览器存储配额受限'}`));
+      };
+    } catch (err) {
+      console.error('IndexedDB saveMedia exception:', err);
+      reject(err instanceof Error ? err : new Error('保存媒体数据异常'));
+    }
   });
 }
 
 export async function getMedia(id: string): Promise<MediaRecord | null> {
   const db = await openDatabase();
   return new Promise((resolve, reject) => {
-    const tx = db.transaction('media', 'readonly');
-    const store = tx.objectStore('media');
-    const request = store.get(id);
+    try {
+      const tx = db.transaction('media', 'readonly');
+      const store = tx.objectStore('media');
+      const request = store.get(id);
 
-    request.onsuccess = () => resolve(request.result || null);
-    request.onerror = () => reject(new Error('读取媒体数据失败'));
+      request.onsuccess = () => resolve(request.result || null);
+      request.onerror = () => reject(new Error('读取媒体数据失败'));
+    } catch (err) {
+      console.error('IndexedDB getMedia exception:', err);
+      resolve(null);
+    }
   });
 }
 
