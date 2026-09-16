@@ -520,9 +520,24 @@ export async function resolveOriginalMedia(media: any): Promise<ResolvedMediaRes
     }
   }
 
-  // 4. If legacy blob exists in memory/object
-  if (media.blob && media.blob instanceof Blob) {
+  // 4. If blob exists in memory/object/database
+  if (media.blob && media.blob instanceof Blob && media.blob.size > 0) {
     const url = URL.createObjectURL(media.blob);
+    return {
+      success: true,
+      url,
+      isObjectUrl: true,
+      fileName,
+      sourceUrl: media.sourceUrl,
+      cleanup: () => {
+        try { URL.revokeObjectURL(url); } catch {}
+      },
+    };
+  }
+
+  // 5. Fallback: If thumbnailBlob exists in record
+  if (media.thumbnailBlob && media.thumbnailBlob instanceof Blob && media.thumbnailBlob.size > 0) {
+    const url = URL.createObjectURL(media.thumbnailBlob);
     return {
       success: true,
       url,

@@ -291,17 +291,22 @@ export async function saveMedia(media: MediaRecord): Promise<void> {
       const tx = db.transaction('media', 'readwrite');
       const store = tx.objectStore('media');
 
-      // Ensure thumbnail blob is clean clonable standard Blob
+      // Preserve thumbnail blob with its correct MIME type
       const cleanThumb = media.thumbnailBlob instanceof Blob
-        ? media.thumbnailBlob.slice(0, media.thumbnailBlob.size, 'image/jpeg')
+        ? media.thumbnailBlob.slice(0, media.thumbnailBlob.size, media.thumbnailBlob.type || 'image/jpeg')
         : media.thumbnailBlob;
 
-      // Notice: Do NOT store the full original file blob to maintain a lightweight database
+      // Preserve media blob with its correct MIME type
+      const cleanBlob = media.blob instanceof Blob
+        ? media.blob.slice(0, media.blob.size, media.blob.type || media.mimeType || 'application/octet-stream')
+        : media.blob;
+
       const cleanRecord: MediaRecord = {
         id: media.id,
         notebookId: media.notebookId,
         type: media.type,
         mimeType: media.mimeType,
+        blob: cleanBlob,
         thumbnailBlob: cleanThumb,
         width: media.width,
         height: media.height,
@@ -316,18 +321,28 @@ export async function saveMedia(media: MediaRecord): Promise<void> {
       const request = store.put(cleanRecord);
 
       request.onsuccess = () => resolve();
-      request.onerror = () => {
-        console.error('IndexedDB saveMedia request failed:', request.error);
-        reject(new Error(`保存媒体数据失败: ${request.error?.message || '未知错误'}`));
+
+      const handleFallback = () => {
+        // If quota exceeded or failed while saving full blob, retry saving thumbnail only
+        if (cleanRecord.blob && cleanRecord.thumbnailBlob) {
+          try {
+            const fallbackTx = db.transaction('media', 'readwrite');
+            const fallbackStore = fallbackTx.objectStore('media');
+            const fallbackRecord = { ...cleanRecord };
+            delete fallbackRecord.blob;
+            const retryReq = fallbackStore.put(fallbackRecord);
+            retryReq.onsuccess = () => resolve();
+            retryReq.onerror = () => reject(new Error('保存缩略图也失败，请清理存储'));
+          } catch {
+            reject(new Error('保存媒体数据失败'));
+          }
+        } else {
+          reject(new Error(`保存媒体数据失败: ${request.error?.message || '存储问题'}`));
+        }
       };
-      tx.onerror = () => {
-        console.error('IndexedDB saveMedia tx failed:', tx.error);
-        reject(new Error(`保存媒体事务失败: ${tx.error?.message || '存储空间不足或格式受限'}`));
-      };
-      tx.onabort = () => {
-        console.error('IndexedDB saveMedia tx aborted:', tx.error);
-        reject(new Error(`保存媒体被中止: ${tx.error?.message || '浏览器存储配额受限'}`));
-      };
+
+      request.onerror = handleFallback;
+      tx.onerror = handleFallback;
     } catch (err) {
       console.error('IndexedDB saveMedia exception:', err);
       reject(err instanceof Error ? err : new Error('保存媒体数据异常'));
