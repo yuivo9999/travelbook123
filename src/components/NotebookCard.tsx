@@ -1,5 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { Book, Calendar, Layers, Trash2, ArrowRight, Download } from 'lucide-react';
+import {
+  Book,
+  Calendar,
+  Layers,
+  Trash2,
+  ArrowRight,
+  Download,
+  Palette,
+  FileText,
+} from 'lucide-react';
 import { Notebook } from '../types';
 import { formatDate, createSafeBlobUrl } from '../utils/media';
 import { getMedia } from '../db/indexedDB';
@@ -9,6 +18,7 @@ interface NotebookCardProps {
   onOpen: (id: string) => void;
   onDeleteRequest: (notebook: Notebook) => void;
   onExportRequest?: (notebook: Notebook) => void;
+  onEditCoverRequest?: (notebook: Notebook) => void;
 }
 
 export const NotebookCard: React.FC<NotebookCardProps> = ({
@@ -16,6 +26,7 @@ export const NotebookCard: React.FC<NotebookCardProps> = ({
   onOpen,
   onDeleteRequest,
   onExportRequest,
+  onEditCoverRequest,
 }) => {
   const [coverUrl, setCoverUrl] = useState<string | null>(null);
 
@@ -24,7 +35,22 @@ export const NotebookCard: React.FC<NotebookCardProps> = ({
     let isMounted = true;
 
     async function loadCover() {
-      if (!notebook.coverImageId) return;
+      // If user uploaded direct custom base64 image
+      if (notebook.coverImageData && notebook.coverType !== 'none' && notebook.coverType !== 'text') {
+        setCoverUrl(notebook.coverImageData);
+        return;
+      }
+
+      if (notebook.coverType === 'none' || notebook.coverType === 'text') {
+        setCoverUrl(null);
+        return;
+      }
+
+      if (!notebook.coverImageId) {
+        setCoverUrl(null);
+        return;
+      }
+
       try {
         const media = await getMedia(notebook.coverImageId);
         if (media && isMounted) {
@@ -43,7 +69,10 @@ export const NotebookCard: React.FC<NotebookCardProps> = ({
       isMounted = false;
       if (activeUrl && activeUrl.startsWith('blob:')) URL.revokeObjectURL(activeUrl);
     };
-  }, [notebook.coverImageId]);
+  }, [notebook.coverImageId, notebook.coverImageData, notebook.coverType]);
+
+  const showTextImage = notebook.coverType === 'text' && Boolean(notebook.coverText);
+  const showCustomImage = (notebook.coverType === 'image' || !notebook.coverType) && Boolean(coverUrl);
 
   return (
     <div
@@ -56,7 +85,7 @@ export const NotebookCard: React.FC<NotebookCardProps> = ({
 
       <div className="pl-2 flex flex-col gap-2.5">
         <div className="flex items-start justify-between gap-2">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 min-w-0">
             <div className="w-8 h-8 rounded-lg bg-[#EFE9E0] text-[#594E42] flex items-center justify-center shrink-0 border border-[#E0D7CC]">
               <Book className="w-4 h-4" />
             </div>
@@ -65,7 +94,20 @@ export const NotebookCard: React.FC<NotebookCardProps> = ({
             </h3>
           </div>
 
-          <div className="flex items-center gap-0.5">
+          <div className="flex items-center gap-0.5 shrink-0">
+            {onEditCoverRequest && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onEditCoverRequest(notebook);
+                }}
+                className="p-1.5 rounded-lg text-[#998E84] hover:text-[#4A3F35] hover:bg-[#F0EAE1] transition-colors"
+                title="设置封面外观 (无封面/文字/图片)"
+              >
+                <Palette className="w-4 h-4" />
+              </button>
+            )}
             {onExportRequest && (
               <button
                 type="button"
@@ -93,11 +135,24 @@ export const NotebookCard: React.FC<NotebookCardProps> = ({
           </div>
         </div>
 
-        {/* Thumbnail Preview strip if exists */}
-        {coverUrl && (
+        {/* 1. Custom Text Cover Preview */}
+        {showTextImage && (
+          <div className="w-full min-h-20 p-3 rounded-lg bg-[#FAF5EC] border border-[#E8DFC2] flex flex-col justify-center">
+            <div className="flex items-center gap-1 text-[10px] text-[#A89480] font-serif italic mb-1">
+              <FileText className="w-3 h-3" />
+              <span>封面寄语</span>
+            </div>
+            <p className="text-xs text-[#4A3F35] leading-relaxed line-clamp-3 font-medium">
+              {notebook.coverText}
+            </p>
+          </div>
+        )}
+
+        {/* 2. Custom or Default Image Preview */}
+        {showCustomImage && (
           <div className="w-full h-24 rounded-lg overflow-hidden border border-[#E8E2D8] bg-[#EFEBE4]">
             <img
-              src={coverUrl}
+              src={coverUrl!}
               alt="封面预览"
               className="w-full h-full object-cover group-hover:scale-103 transition-transform duration-300"
             />

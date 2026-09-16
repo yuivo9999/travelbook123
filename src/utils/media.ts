@@ -323,3 +323,206 @@ export function formatDate(timestamp: number): string {
   const day = String(d.getDate()).padStart(2, '0');
   return `${y}/${m}/${day}`;
 }
+
+// ----------------- Lightweight Original Media Resolution -----------------
+
+// In-session registry holding active File objects during current browser runtime
+const sessionFileRegistry = new Map<string, File>();
+
+export function registerSessionFile(mediaId: string, file: File) {
+  sessionFileRegistry.set(mediaId, file);
+}
+
+export function getSessionFile(mediaId: string): File | undefined {
+  return sessionFileRegistry.get(mediaId);
+}
+
+export function removeSessionFile(mediaId: string) {
+  sessionFileRegistry.delete(mediaId);
+}
+
+export interface ResolvedMediaSuccess {
+  success: true;
+  url: string;
+  isObjectUrl: boolean;
+  fileName: string;
+  sourceUrl?: string;
+  cleanup?: () => void;
+}
+
+export interface ResolvedMediaFailure {
+  success: false;
+  isMissing: boolean;
+  fileName: string;
+  error: string; // "missing <fileName>"
+  message: string;
+}
+
+export type ResolvedMediaResult = ResolvedMediaSuccess | ResolvedMediaFailure;
+
+/**
+ * Access original media from original storage location without persistent blob caching in database
+ */
+export async function resolveOriginalMedia(media: any): Promise<ResolvedMediaResult> {
+  if (!media) {
+    return {
+      success: false,
+      isMissing: true,
+      fileName: '未知文件',
+      error: 'missing 文件',
+      message: '未找到媒体记录',
+    };
+  }
+
+  const fileName = media.fileName || '未知文件';
+
+  // 1. Check in-memory session file
+  const sessionFile = sessionFileRegistry.get(media.id);
+  if (sessionFile) {
+    try {
+      const url = URL.createObjectURL(sessionFile);
+      return {
+        success: true,
+        url,
+        isObjectUrl: true,
+        fileName: media.fileName || sessionFile.name,
+        sourceUrl: media.sourceUrl,
+        cleanup: () => {
+          try { URL.revokeObjectURL(url); } catch {}
+        },
+      };
+    } catch {
+      // continue to next resolution
+    }
+  }
+
+  // 2. Check FileSystemFileHandle (reads directly from user's disk without database cache)
+  if (media.fileHandle) {
+    try {
+      let perm = 'prompt';
+      if (typeof media.fileHandle.queryPermission === 'function') {
+        perm = await media.fileHandle.queryPermission({ mode: 'read' });
+        if (perm !== 'granted' && typeof media.fileHandle.requestPermission === 'function') {
+          perm = await media.fileHandle.requestPermission({ mode: 'read' });
+        }
+      }
+
+      if (perm === 'granted' || typeof media.fileHandle.queryPermission !== 'function') {
+        const file = await media.fileHandle.getFile();
+        if (file && file.size > 0) {
+          const url = URL.createObjectURL(file);
+          return {
+            success: true,
+            url,
+            isObjectUrl: true,
+            fileName: media.fileName || file.name,
+            sourceUrl: media.sourceUrl,
+            cleanup: () => {
+              try { URL.revokeObjectURL(url); } catch {}
+            },
+          };
+        }
+      }
+    } catch (err: any) {
+      console.warn('Accessing local disk fileHandle failed:', err);
+      // File removed, moved, or deleted from disk -> return missing error
+      return {
+        success: false,
+        isMissing: true,
+        fileName,
+        error: `missing ${fileName}`,
+        message: `原存储地址文件已不见或已被移动: ${fileName}`,
+      };
+    }
+  }
+
+  // 3. Check network / remote sourceUrl
+  if (media.sourceUrl && typeof media.sourceUrl === 'string') {
+    const trimmed = media.sourceUrl.trim();
+    if (trimmed.startsWith('http://') || trimmed.startsWith('https://') || trimmed.startsWith('data:') || trimmed.startsWith('blob:')) {
+      return {
+        success: true,
+        url: trimmed,
+        isObjectUrl: false,
+        fileName,
+        sourceUrl: trimmed,
+      };
+    }
+  }
+
+  // 4. If legacy blob exists in memory/object
+  if (media.blob && media.blob instanceof Blob) {
+    const url = URL.createObjectURL(media.blob);
+    return {
+      success: true,
+      url,
+      isObjectUrl: true,
+      fileName,
+      sourceUrl: media.sourceUrl,
+      cleanup: () => {
+        try { URL.revokeObjectURL(url); } catch {}
+      },
+    };
+  }
+
+  // 5. Original file is missing from storage address
+  return {
+    success: false,
+    isMissing: true,
+    fileName,
+    error: `missing ${fileName}`,
+    message: `原存储地址文件已不见: ${fileName}`,
+  };
+}
+
+export interface PickedMediaFile {
+  file: File;
+  handle?: any;
+  sourceUrl?: string;
+}
+
+/**
+ * Pick files using modern File System Access API when supported
+ */
+export async function pickFilesViaPicker(type: 'image' | 'video'): Promise<PickedMediaFile[]> {
+  if (typeof window !== 'undefined' && 'showOpenFilePicker' in window) {
+    try {
+      const types =
+        type === 'image'
+          ? [
+              {
+                description: '图片文件',
+                accept: {
+                  'image/*': ['.png', '.jpg', '.jpeg', '.webp', '.gif', '.svg', '.bmp'],
+                },
+              },
+            ]
+          : [
+              {
+                description: '视频文件',
+                accept: {
+                  'video/*': ['.mp4', '.mov', '.webm', '.m4v', '.ogv'],
+                },
+              },
+            ];
+
+      const handles = await (window as any).showOpenFilePicker({
+        multiple: true,
+        types,
+      });
+
+      const results: PickedMediaFile[] = [];
+      for (const handle of handles) {
+        const file = await handle.getFile();
+        results.push({ file, handle, sourceUrl: file.name });
+      }
+      return results;
+    } catch (err: any) {
+      if (err?.name === 'AbortError') {
+        return []; // User cancelled
+      }
+      console.warn('showOpenFilePicker failed, fallback to input', err);
+    }
+  }
+  return [];
+}

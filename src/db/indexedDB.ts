@@ -291,19 +291,26 @@ export async function saveMedia(media: MediaRecord): Promise<void> {
       const tx = db.transaction('media', 'readwrite');
       const store = tx.objectStore('media');
 
-      // Ensure blobs are clean clonable standard Blobs (native File objects can fail structured clone in sandboxed iframes)
-      const cleanBlob = media.blob instanceof Blob
-        ? media.blob.slice(0, media.blob.size, media.mimeType || 'application/octet-stream')
-        : media.blob;
-
+      // Ensure thumbnail blob is clean clonable standard Blob
       const cleanThumb = media.thumbnailBlob instanceof Blob
         ? media.thumbnailBlob.slice(0, media.thumbnailBlob.size, 'image/jpeg')
         : media.thumbnailBlob;
 
+      // Notice: Do NOT store the full original file blob to maintain a lightweight database
       const cleanRecord: MediaRecord = {
-        ...media,
-        blob: cleanBlob,
+        id: media.id,
+        notebookId: media.notebookId,
+        type: media.type,
+        mimeType: media.mimeType,
         thumbnailBlob: cleanThumb,
+        width: media.width,
+        height: media.height,
+        duration: media.duration,
+        fileName: media.fileName,
+        sourceUrl: media.sourceUrl,
+        fileHandle: media.fileHandle,
+        fileSize: media.fileSize,
+        createdAt: media.createdAt || Date.now(),
       };
 
       const request = store.put(cleanRecord);
@@ -324,6 +331,35 @@ export async function saveMedia(media: MediaRecord): Promise<void> {
     } catch (err) {
       console.error('IndexedDB saveMedia exception:', err);
       reject(err instanceof Error ? err : new Error('保存媒体数据异常'));
+    }
+  });
+}
+
+export async function updateMediaSource(
+  id: string,
+  update: { fileHandle?: any; sourceUrl?: string; fileName?: string }
+): Promise<void> {
+  const db = await openDatabase();
+  return new Promise((resolve, reject) => {
+    try {
+      const tx = db.transaction('media', 'readwrite');
+      const store = tx.objectStore('media');
+      const getReq = store.get(id);
+
+      getReq.onsuccess = () => {
+        if (getReq.result) {
+          const media = getReq.result as MediaRecord;
+          if (update.fileHandle !== undefined) media.fileHandle = update.fileHandle;
+          if (update.sourceUrl !== undefined) media.sourceUrl = update.sourceUrl;
+          if (update.fileName !== undefined) media.fileName = update.fileName;
+          store.put(media);
+        }
+      };
+
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(new Error('更新媒体原地址信息失败'));
+    } catch (err) {
+      reject(err instanceof Error ? err : new Error('更新媒体原地址异常'));
     }
   });
 }

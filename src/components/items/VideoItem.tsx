@@ -7,6 +7,7 @@ import {
   Link2,
   RotateCw,
   RotateCcw,
+  Maximize2,
 } from 'lucide-react';
 import { ContentItem } from '../../types';
 import { getMedia } from '../../db/indexedDB';
@@ -20,6 +21,7 @@ interface VideoItemProps {
   canvasWidth: number;
   onDragStart: (e: React.PointerEvent, item: ContentItem) => void;
   onRotateStart: (e: React.PointerEvent, item: ContentItem) => void;
+  onResizeStart: (e: React.PointerEvent, item: ContentItem) => void;
   onResetTransform: (item: ContentItem) => void;
   onPlayVideo: (mediaId?: string) => void;
   onDelete: (id: string, mediaId?: string) => void;
@@ -30,6 +32,7 @@ export const VideoItem: React.FC<VideoItemProps> = ({
   canvasWidth,
   onDragStart,
   onRotateStart,
+  onResizeStart,
   onResetTransform,
   onPlayVideo,
   onDelete,
@@ -106,7 +109,8 @@ export const VideoItem: React.FC<VideoItemProps> = ({
     };
   }, [item.mediaId, item.fileName, item.sourceUrl]);
 
-  const effectiveWidth = Math.min(item.width || 260, canvasWidth - 32);
+  const effectiveWidth = Math.min(Math.max(item.width || 260, 140), canvasWidth - 32);
+  const effectiveHeight = Math.max(item.height || 210, 110);
 
   return (
     <div
@@ -118,19 +122,12 @@ export const VideoItem: React.FC<VideoItemProps> = ({
       }}
       className="absolute top-0 left-0 transition-shadow duration-150 group touch-auto select-none"
     >
-      {/* Top Protruding Rotation Handle (Touch-friendly & Desktop) */}
       <div
-        onPointerDown={(e) => onRotateStart(e, item)}
-        className="absolute -top-7 left-1/2 -translate-x-1/2 flex flex-col items-center cursor-grab active:cursor-grabbing touch-none z-30 select-none group/rot"
-        title="按住旋转视频 (支持机械音效与灵敏度调节)"
+        className="relative bg-[#FFFFFF] rounded-xl border border-[#E6E0D6] p-2.5 shadow-[var(--scrap-shadow)] hover:shadow-[var(--scrap-hover)] transition-all flex flex-col"
+        style={{
+          minHeight: `${effectiveHeight}px`,
+        }}
       >
-        <div className="w-6 h-6 rounded-full bg-white border border-[#D9CEBF] shadow-xs flex items-center justify-center text-[#7D7062] group-hover/rot:text-[#2D2721] group-hover/rot:scale-110 active:scale-95 transition-all">
-          <RotateCw className="w-3 h-3" />
-        </div>
-        <div className="w-0.5 h-1.5 bg-[#D9CEBF]" />
-      </div>
-
-      <div className="relative bg-[#FFFFFF] rounded-xl border border-[#E6E0D6] p-2.5 shadow-[var(--scrap-shadow)] hover:shadow-[var(--scrap-hover)] transition-all">
         {/* Top washi tape grab handle */}
         <div className="flex items-center justify-between pb-1.5 border-b border-black/5 mb-1.5">
           <div
@@ -156,7 +153,7 @@ export const VideoItem: React.FC<VideoItemProps> = ({
               type="button"
               onClick={() => onResetTransform(item)}
               className="p-1 rounded-md text-[#7D7062] hover:text-[#2D2721] hover:bg-black/5 transition-colors"
-              title="恢复默认角度 (0°)"
+              title="恢复默认大小与角度"
             >
               <RotateCcw className="w-3.5 h-3.5" />
             </button>
@@ -174,7 +171,7 @@ export const VideoItem: React.FC<VideoItemProps> = ({
         {/* Video thumbnail with static frame or video preview & play badge */}
         <div
           onClick={() => onPlayVideo(item.mediaId)}
-          className="relative w-full aspect-16/10 bg-[#231E1A] rounded-lg overflow-hidden flex items-center justify-center cursor-pointer group/vid"
+          className="relative w-full flex-1 min-h-[100px] bg-[#231E1A] rounded-lg overflow-hidden flex items-center justify-center cursor-pointer group/vid"
         >
           {loading ? (
             <div className="flex flex-col items-center gap-1 text-[#A09386]">
@@ -240,6 +237,28 @@ export const VideoItem: React.FC<VideoItemProps> = ({
             </a>
           </div>
         )}
+
+        {/* Bottom-left Corner Rotation Handle (Touch-friendly & Desktop) */}
+        <div
+          onPointerDown={(e) => onRotateStart(e, item)}
+          className="absolute -bottom-2 -left-2 w-7 h-7 flex items-center justify-center cursor-grab active:cursor-grabbing touch-none z-30 select-none text-[#7D7062] hover:text-[#2D2721] active:scale-110 transition-transform"
+          title="触摸或按住旋转视频 (左下角，支持机械齿轮音效与灵敏度调节)"
+        >
+          <div className="w-5 h-5 rounded-bl-lg rounded-tr-sm bg-white border border-[#D9CEBF] shadow-xs flex items-center justify-center">
+            <RotateCw className="w-2.5 h-2.5" />
+          </div>
+        </div>
+
+        {/* Bottom-right Corner Resize Handle (Touch-friendly & Desktop) */}
+        <div
+          onPointerDown={(e) => onResizeStart(e, item)}
+          className="absolute -bottom-2 -right-2 w-7 h-7 flex items-center justify-center cursor-nwse-resize touch-none z-30 select-none text-[#7D7062] hover:text-[#2D2721] active:scale-110 transition-transform"
+          title="触摸或按住拖动以改变视频大小 (右下角)"
+        >
+          <div className="w-5 h-5 rounded-br-lg rounded-tl-sm bg-white border border-[#D9CEBF] shadow-xs flex items-center justify-center">
+            <Maximize2 className="w-2.5 h-2.5 rotate-90" />
+          </div>
+        </div>
       </div>
     </div>
   );

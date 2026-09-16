@@ -81,18 +81,6 @@ export const TextItem: React.FC<TextItemProps> = ({
       }}
       className="absolute top-0 left-0 transition-shadow duration-150 group touch-auto select-none"
     >
-      {/* Top Protruding Rotation Handle (Touch-friendly & Desktop) */}
-      <div
-        onPointerDown={(e) => onRotateStart(e, item)}
-        className="absolute -top-7 left-1/2 -translate-x-1/2 flex flex-col items-center cursor-grab active:cursor-grabbing touch-none z-30 select-none group/rot"
-        title="按住旋转便签纸 (支持机械音效与灵敏度调节)"
-      >
-        <div className="w-6 h-6 rounded-full bg-white border border-[#D9CEBF] shadow-xs flex items-center justify-center text-[#7D7062] group-hover/rot:text-[#2D2721] group-hover/rot:scale-110 active:scale-95 transition-all">
-          <RotateCw className="w-3 h-3" />
-        </div>
-        <div className="w-0.5 h-1.5 bg-[#D9CEBF]" />
-      </div>
-
       <div
         className={`relative rounded-xl border p-3 pt-2 shadow-[var(--scrap-shadow)] hover:shadow-[var(--scrap-hover)] transition-all flex flex-col ${colorStyles}`}
         style={{
@@ -196,11 +184,22 @@ export const TextItem: React.FC<TextItemProps> = ({
           </div>
         )}
 
+        {/* Bottom-left Corner Rotation Handle (Touch-friendly & Desktop) */}
+        <div
+          onPointerDown={(e) => onRotateStart(e, item)}
+          className="absolute -bottom-2 -left-2 w-7 h-7 flex items-center justify-center cursor-grab active:cursor-grabbing touch-none z-30 select-none text-[#7D7062] hover:text-[#2D2721] active:scale-110 transition-transform"
+          title="触摸或按住旋转便签 (左下角，支持机械齿轮音效与灵敏度调节)"
+        >
+          <div className="w-5 h-5 rounded-bl-lg rounded-tr-sm bg-white border border-[#D9CEBF] shadow-xs flex items-center justify-center">
+            <RotateCw className="w-2.5 h-2.5" />
+          </div>
+        </div>
+
         {/* Bottom-right Corner Resize Handle (Touch-friendly & Desktop) */}
         <div
           onPointerDown={(e) => onResizeStart(e, item)}
           className="absolute -bottom-2 -right-2 w-7 h-7 flex items-center justify-center cursor-nwse-resize touch-none z-30 select-none text-[#7D7062] hover:text-[#2D2721] active:scale-110 transition-transform"
-          title="触摸或按住拖动以改变便签大小 (文字自适应排列)"
+          title="触摸或按住拖动以改变便签大小 (右下角，文字自适应排列)"
         >
           <div className="w-5 h-5 rounded-br-lg rounded-tl-sm bg-white border border-[#D9CEBF] shadow-xs flex items-center justify-center">
             <Maximize2 className="w-2.5 h-2.5 rotate-90" />

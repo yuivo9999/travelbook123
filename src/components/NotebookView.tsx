@@ -28,7 +28,7 @@ import {
   saveNotebook,
 } from '../db/indexedDB';
 import { playMechanicalTick } from '../utils/rotationSound';
-import { processImageFile, processVideoFile } from '../utils/media';
+import { processImageFile, processVideoFile, registerSessionFile } from '../utils/media';
 
 function inferMimeType(file: File, defaultType: string): string {
   if (file.type && file.type.trim().length > 0) return file.type;
@@ -54,6 +54,7 @@ import { AddContentModal } from './modals/AddContentModal';
 import { ImageViewerModal } from './modals/ImageViewerModal';
 import { VideoPlayerModal } from './modals/VideoPlayerModal';
 import { ConfirmDialog } from './modals/ConfirmDialog';
+import { EditCoverModal } from './modals/EditCoverModal';
 import { PaperStyle, AppSettings } from '../types';
 import { PAPER_PATTERNS } from '../utils/settings';
 
@@ -80,6 +81,7 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
   // Modals state
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [isCoverModalOpen, setIsCoverModalOpen] = useState(false);
   const [previewImageId, setPreviewImageId] = useState<string | null>(null);
   const [previewVideoId, setPreviewVideoId] = useState<string | null>(null);
   const [itemToDelete, setItemToDelete] = useState<{ id: string; mediaId?: string } | null>(null);
@@ -92,6 +94,15 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
   const [paperPattern, setPaperPattern] = useState<PaperStyle>(
     notebook.paperPattern || settings.defaultPaperPattern || 'dots'
   );
+
+  // Synchronize paper pattern when notebook or default settings change
+  useEffect(() => {
+    if (notebook.paperPattern) {
+      setPaperPattern(notebook.paperPattern);
+    } else if (settings.defaultPaperPattern) {
+      setPaperPattern(settings.defaultPaperPattern);
+    }
+  }, [notebook.paperPattern, settings.defaultPaperPattern]);
 
   // Drag-and-drop file upload state onto paper canvas
   const [isDraggingFile, setIsDraggingFile] = useState(false);
@@ -348,24 +359,27 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
     }
   };
 
-  // 2. Add image item
-  const handleAddImage = async (file: File) => {
+  // 2. Add image item (Lightweight: only saves thumbnail in DB, accesses original file on click)
+  const handleAddImage = async (file: File, fileHandle?: any) => {
     try {
-      showToast('正在处理照片并贴入手账...', 'info');
+      showToast('正在生成缩略图并贴入手账...', 'info');
       const mime = inferMimeType(file, 'image/jpeg');
       const { thumbnailBlob, width, height } = await processImageFile(file);
 
       const mediaId = 'media_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
+      registerSessionFile(mediaId, file);
+
       const mediaRecord: MediaRecord = {
         id: mediaId,
         notebookId: notebook.id,
         type: 'image',
         mimeType: mime,
-        blob: file,
         thumbnailBlob,
         width,
         height,
         fileName: file.name || 'image.jpg',
+        sourceUrl: file.name || 'local_image',
+        fileHandle: fileHandle || undefined,
         fileSize: file.size,
         createdAt: Date.now(),
       };
@@ -384,6 +398,8 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
         notebookId: notebook.id,
         type: 'image',
         mediaId,
+        fileName: file.name,
+        sourceUrl: file.name,
         x,
         y,
         width: cardWidth,
@@ -404,7 +420,7 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
         onUpdateNotebook(updated);
       }
 
-      showToast('已成功贴上照片', 'success');
+      showToast('已成功贴上照片 (轻量化存储)', 'success');
 
       if (y > window.scrollY + window.innerHeight - 200) {
         window.scrollTo({ top: y - 100, behavior: 'smooth' });
@@ -416,25 +432,28 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
   };
   handleAddImageRef.current = handleAddImage;
 
-  // 3. Add video item
-  const handleAddVideo = async (file: File) => {
+  // 3. Add video item (Lightweight: only saves frame thumbnail in DB, accesses original video on play)
+  const handleAddVideo = async (file: File, fileHandle?: any) => {
     try {
-      showToast('正在解析视频并生成手账卡片...', 'info');
+      showToast('正在提取视频封面并生成手账卡片...', 'info');
       const mime = inferMimeType(file, 'video/mp4');
       const { thumbnailBlob, duration, width, height } = await processVideoFile(file);
 
       const mediaId = 'media_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
+      registerSessionFile(mediaId, file);
+
       const mediaRecord: MediaRecord = {
         id: mediaId,
         notebookId: notebook.id,
         type: 'video',
         mimeType: mime,
-        blob: file,
         thumbnailBlob: thumbnailBlob || undefined,
         duration,
         width,
         height,
         fileName: file.name || 'video.mp4',
+        sourceUrl: file.name || 'local_video',
+        fileHandle: fileHandle || undefined,
         fileSize: file.size,
         createdAt: Date.now(),
       };
@@ -452,6 +471,8 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
         notebookId: notebook.id,
         type: 'video',
         mediaId,
+        fileName: file.name,
+        sourceUrl: file.name,
         x,
         y,
         width: cardWidth,
@@ -464,7 +485,7 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
 
       await saveItem(newItem);
       setItems((prev) => [...prev, newItem]);
-      showToast('已成功贴上视频剪辑', 'success');
+      showToast('已成功贴上视频剪辑 (轻量化存储)', 'success');
 
       if (y > window.scrollY + window.innerHeight - 200) {
         window.scrollTo({ top: y - 100, behavior: 'smooth' });
@@ -475,6 +496,61 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
     }
   };
   handleAddVideoRef.current = handleAddVideo;
+
+  // 4. Add Media from URL or external address
+  const handleAddUrlMedia = async (url: string, type: 'image' | 'video', customName?: string) => {
+    try {
+      showToast('正在链接原地址媒体...', 'info');
+      const mediaId = 'media_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
+      const fileName = customName || url.split('/').pop()?.split('?')[0] || (type === 'image' ? 'photo.jpg' : 'video.mp4');
+
+      const mediaRecord: MediaRecord = {
+        id: mediaId,
+        notebookId: notebook.id,
+        type,
+        mimeType: type === 'image' ? 'image/jpeg' : 'video/mp4',
+        fileName,
+        sourceUrl: url,
+        createdAt: Date.now(),
+      };
+
+      await saveMedia(mediaRecord);
+
+      const cardWidth = Math.min(type === 'image' ? 260 : 280, canvasWidth - 32);
+      const cardHeight = type === 'image' ? 220 : 220;
+
+      const { x, y, rotation } = getNextSpawnCoordinates(cardWidth, cardHeight);
+      const newZ = ++maxZIndexRef.current;
+
+      const newItem: ContentItem = {
+        id: 'item_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),
+        notebookId: notebook.id,
+        type,
+        mediaId,
+        fileName,
+        sourceUrl: url,
+        x,
+        y,
+        width: cardWidth,
+        height: cardHeight,
+        rotation,
+        zIndex: newZ,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      };
+
+      await saveItem(newItem);
+      setItems((prev) => [...prev, newItem]);
+      showToast(`已成功贴上${type === 'image' ? '照片' : '视频'}原链接`, 'success');
+
+      if (y > window.scrollY + window.innerHeight - 200) {
+        window.scrollTo({ top: y - 100, behavior: 'smooth' });
+      }
+    } catch (err) {
+      console.error('添加网络媒体失败', err);
+      showToast('添加网络媒体失败', 'error');
+    }
+  };
 
   // Update text content
   const handleUpdateText = async (id: string, newText: string) => {
@@ -620,6 +696,44 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
         rotation: defaultRotation,
       });
       showToast('便签已恢复默认大小与角度', 'info');
+    } else if (item.type === 'image') {
+      const defaultWidth = 240;
+      const defaultHeight = 200;
+      const defaultRotation = 0;
+
+      setItems((prev) =>
+        prev.map((it) =>
+          it.id === item.id
+            ? { ...it, width: defaultWidth, height: defaultHeight, rotation: defaultRotation }
+            : it
+        )
+      );
+
+      await updateItemTransform(item.id, {
+        width: defaultWidth,
+        height: defaultHeight,
+        rotation: defaultRotation,
+      });
+      showToast('照片已恢复默认大小与角度', 'info');
+    } else if (item.type === 'video') {
+      const defaultWidth = 260;
+      const defaultHeight = 210;
+      const defaultRotation = 0;
+
+      setItems((prev) =>
+        prev.map((it) =>
+          it.id === item.id
+            ? { ...it, width: defaultWidth, height: defaultHeight, rotation: defaultRotation }
+            : it
+        )
+      );
+
+      await updateItemTransform(item.id, {
+        width: defaultWidth,
+        height: defaultHeight,
+        rotation: defaultRotation,
+      });
+      showToast('视频已恢复默认大小与角度', 'info');
     } else {
       setItems((prev) =>
         prev.map((it) => (it.id === item.id ? { ...it, rotation: 0 } : it))
@@ -904,6 +1018,18 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
               </select>
             </div>
 
+            {/* Custom Cover button */}
+            <button
+              type="button"
+              id="btn-notebook-cover"
+              onClick={() => setIsCoverModalOpen(true)}
+              className="flex items-center gap-1 px-2.5 sm:px-3 py-1.5 rounded-xl bg-[#FAF6F0] hover:bg-[#F2ECE1] border border-[#DDD4C7] text-[#4A3F35] text-xs font-medium transition-all active:scale-95 shadow-2xs"
+              title="定制手账本封面 (无图/文字/自选图片)"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-[#8C7A68]" />
+              <span className="hidden sm:inline">封面</span>
+            </button>
+
             {/* Export current notebook button */}
             <button
               type="button"
@@ -974,7 +1100,7 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
               }
             }
           }}
-          style={{ minHeight: `${calculateCanvasHeight()}px` }}
+          style={{ minHeight: `${calculateCanvasHeight()}px`, isolation: 'isolate' }}
           className={`relative w-full border border-[#DFD8CC] shadow-[0_10px_35px_rgba(60,45,35,0.08)] overflow-hidden transition-all ${paperCornerClass} ${paperPatternClass}`}
         >
           {/* Drag file dropzone overlay */}
@@ -1092,6 +1218,7 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
                   canvasWidth={canvasWidth}
                   onDragStart={handleDragStart}
                   onRotateStart={handleRotateStart}
+                  onResizeStart={handleResizeStart}
                   onResetTransform={handleResetTransform}
                   onViewImage={(mediaId) => setPreviewImageId(mediaId || null)}
                   onDelete={(id, mediaId) => setItemToDelete({ id, mediaId })}
@@ -1107,6 +1234,7 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
                   canvasWidth={canvasWidth}
                   onDragStart={handleDragStart}
                   onRotateStart={handleRotateStart}
+                  onResizeStart={handleResizeStart}
                   onResetTransform={handleResetTransform}
                   onPlayVideo={(mediaId) => setPreviewVideoId(mediaId || null)}
                   onDelete={(id, mediaId) => setItemToDelete({ id, mediaId })}
@@ -1122,7 +1250,7 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
       {/* Rename Notebook Modal */}
       {isRenaming && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/45 backdrop-blur-xs animate-in fade-in duration-200"
+          className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/45 backdrop-blur-xs animate-in fade-in duration-200"
           onClick={() => setIsRenaming(false)}
         >
           <div
@@ -1168,6 +1296,7 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
         onAddText={handleAddText}
         onSelectImage={handleAddImage}
         onSelectVideo={handleAddVideo}
+        onAddUrlMedia={handleAddUrlMedia}
       />
 
       {/* Fullsize Image Viewer Modal */}
@@ -1201,6 +1330,24 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
         isOpen={isExportModalOpen}
         initialNotebookId={notebook.id}
         onClose={() => setIsExportModalOpen(false)}
+        showToast={showToast}
+      />
+
+      {/* Edit Cover Modal */}
+      <EditCoverModal
+        isOpen={isCoverModalOpen}
+        notebook={notebook}
+        onClose={() => setIsCoverModalOpen(false)}
+        onSave={async (updated) => {
+          onUpdateNotebook(updated);
+          try {
+            await saveNotebook(updated);
+            showToast('已更新封面样式', 'success');
+          } catch (e) {
+            console.error('保存封面失败', e);
+            showToast('保存封面失败', 'error');
+          }
+        }}
         showToast={showToast}
       />
     </div>

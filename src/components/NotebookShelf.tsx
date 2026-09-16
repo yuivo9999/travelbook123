@@ -4,12 +4,15 @@ import { Notebook } from '../types';
 import { NotebookCard } from './NotebookCard';
 import { ConfirmDialog } from './modals/ConfirmDialog';
 import { ExportModal } from './modals/ExportModal';
+import { EditCoverModal } from './modals/EditCoverModal';
+import { saveNotebook } from '../db/indexedDB';
 
 interface NotebookShelfProps {
   notebooks: Notebook[];
   onCreateNotebook: (title: string) => Promise<string>;
   onOpenNotebook: (id: string) => void;
   onDeleteNotebook: (id: string) => Promise<void>;
+  onUpdateNotebook?: (updated: Notebook) => void;
   onOpenSettings: () => void;
   showToast?: (text: string, type?: 'success' | 'error' | 'info') => void;
 }
@@ -19,6 +22,7 @@ export const NotebookShelf: React.FC<NotebookShelfProps> = ({
   onCreateNotebook,
   onOpenNotebook,
   onDeleteNotebook,
+  onUpdateNotebook,
   onOpenSettings,
   showToast = () => {},
 }) => {
@@ -28,6 +32,9 @@ export const NotebookShelf: React.FC<NotebookShelfProps> = ({
 
   // Notebook deletion state
   const [notebookToDelete, setNotebookToDelete] = useState<Notebook | null>(null);
+
+  // Notebook cover editing state
+  const [notebookToEditCover, setNotebookToEditCover] = useState<Notebook | null>(null);
 
   // Notebook export modal state
   const [exportModalState, setExportModalState] = useState<{
@@ -56,6 +63,22 @@ export const NotebookShelf: React.FC<NotebookShelfProps> = ({
     const id = notebookToDelete.id;
     setNotebookToDelete(null);
     await onDeleteNotebook(id);
+  };
+
+  const handleSaveCover = async (coverData: {
+    coverType: any;
+    coverText?: string;
+    coverImageData?: string;
+    coverImageId?: string;
+  }) => {
+    if (!notebookToEditCover) return;
+    const updated: Notebook = {
+      ...notebookToEditCover,
+      ...coverData,
+      updatedAt: Date.now(),
+    };
+    await saveNotebook(updated);
+    onUpdateNotebook?.(updated);
   };
 
   return (
@@ -137,6 +160,7 @@ export const NotebookShelf: React.FC<NotebookShelfProps> = ({
                   onOpen={onOpenNotebook}
                   onDeleteRequest={(target) => setNotebookToDelete(target)}
                   onExportRequest={(target) => setExportModalState({ isOpen: true, notebookId: target.id })}
+                  onEditCoverRequest={(target) => setNotebookToEditCover(target)}
                 />
               ))}
             </div>
@@ -147,7 +171,7 @@ export const NotebookShelf: React.FC<NotebookShelfProps> = ({
       {/* Create Notebook Modal */}
       {isCreateModalOpen && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/45 backdrop-blur-xs animate-in fade-in duration-200"
+          className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/45 backdrop-blur-xs animate-in fade-in duration-200"
           onClick={() => setIsCreateModalOpen(false)}
         >
           <div
@@ -228,6 +252,15 @@ export const NotebookShelf: React.FC<NotebookShelfProps> = ({
         isOpen={exportModalState.isOpen}
         initialNotebookId={exportModalState.notebookId}
         onClose={() => setExportModalState({ isOpen: false })}
+        showToast={showToast}
+      />
+
+      {/* Edit Cover Modal */}
+      <EditCoverModal
+        isOpen={Boolean(notebookToEditCover)}
+        notebook={notebookToEditCover}
+        onSave={handleSaveCover}
+        onClose={() => setNotebookToEditCover(null)}
         showToast={showToast}
       />
     </div>

@@ -33,9 +33,25 @@ export default function App() {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
 
-  const handleUpdateSettings = (newSettings: AppSettings) => {
+  const handleUpdateSettings = async (newSettings: AppSettings) => {
     setSettings(newSettings);
     saveSettings(newSettings);
+
+    if (activeNotebook) {
+      const updatedNb: Notebook = {
+        ...activeNotebook,
+        backgroundSkin: newSettings.backgroundSkin,
+        paperPattern: newSettings.defaultPaperPattern,
+        updatedAt: Date.now(),
+      };
+      setActiveNotebook(updatedNb);
+      setNotebooks((prev) => prev.map((n) => (n.id === updatedNb.id ? updatedNb : n)));
+      try {
+        await saveNotebook(updatedNb);
+      } catch (err) {
+        console.error('更新手账样式失败', err);
+      }
+    }
   };
 
   // Fetch all notebooks

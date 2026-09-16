@@ -14,7 +14,7 @@ interface ToastProps {
 
 export const ToastContainer: React.FC<ToastProps> = ({ toasts, onDismiss }) => {
   return (
-    <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 flex flex-col gap-2 w-[90%] max-w-md pointer-events-none">
+    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[99999] flex flex-col gap-2 w-[90%] max-w-md pointer-events-none">
       {toasts.map((toast) => (
         <ToastItem key={toast.id} toast={toast} onDismiss={onDismiss} />
       ))}
@@ -38,7 +38,7 @@ const ToastItem: React.FC<{ toast: ToastMessage; onDismiss: (id: string) => void
   return (
     <div
       id={`toast-${toast.id}`}
-      className={`pointer-events-auto flex items-center gap-3 px-4 py-3 rounded-xl shadow-lg border text-sm transition-all duration-300 animate-in fade-in slide-in-from-top-2 ${
+      className={`pointer-events-auto flex items-center gap-3 px-4 py-3 rounded-xl shadow-lg border text-sm transition-all duration-300 animate-in fade-in slide-in-from-bottom-2 ${
         isError
           ? 'bg-[#FDF2F2] border-[#F8D7DA] text-[#842029]'
           : 'bg-[#F3F8F2] border-[#D1E7DD] text-[#0F5132]'

@@ -10,6 +10,8 @@ export type BackgroundSkin =
 
 export type PaperStyle = 'dots' | 'grid' | 'lines' | 'blank' | 'craft' | 'textured';
 
+export type CoverType = 'none' | 'text' | 'image';
+
 export interface AppSettings {
   backgroundSkin: BackgroundSkin;
   defaultPaperPattern: PaperStyle;
@@ -27,7 +29,11 @@ export interface Notebook {
   createdAt: number;
   updatedAt: number;
   itemCount?: number;
-  coverImageId?: string; // thumbnail media id of the first image
+  coverType?: CoverType; // 'none' | 'text' | 'image'
+  coverImageId?: string; // thumbnail media id if image chosen from media
+  coverImageData?: string; // base64 data for custom user uploaded cover image
+  coverText?: string; // custom subtitle/quote for text cover
+  coverColor?: string; // custom cover tint
   paperPattern?: PaperStyle;
   backgroundSkin?: BackgroundSkin;
 }
@@ -56,13 +62,14 @@ export interface MediaRecord {
   notebookId: string;
   type: 'image' | 'video';
   mimeType: string;
-  blob: Blob;
-  thumbnailBlob?: Blob;
+  blob?: Blob; // Not cached in database to keep app ultra-lightweight
+  thumbnailBlob?: Blob; // Compressed lightweight thumbnail (the only cached binary)
   width?: number;
   height?: number;
   duration?: number; // in seconds for video
   fileName?: string;
-  sourceUrl?: string;
+  sourceUrl?: string; // Original storage address or URL
+  fileHandle?: any; // FileSystemFileHandle for on-demand direct reading from disk
   fileSize?: number;
   createdAt: number;
 }
