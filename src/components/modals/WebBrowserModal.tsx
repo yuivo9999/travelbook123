@@ -37,25 +37,20 @@ export const WebBrowserModal: React.FC<WebBrowserModalProps> = ({
   const [hasIframeLoadError, setHasIframeLoadError] = useState(false);
   const [resolvedEmbedUrl, setResolvedEmbedUrl] = useState<string | null>(null);
   const [resolvedPcUrl, setResolvedPcUrl] = useState<string | null>(null);
-  const [resolvedMDouyinUrl, setResolvedMDouyinUrl] = useState<string | null>(null);
   const [isResolvingDouyin, setIsResolvingDouyin] = useState(false);
+  const [douyinPlayerMode, setDouyinPlayerMode] = useState<'open' | 'pc'>('open');
   const videoRef = useRef<HTMLVideoElement>(null);
 
   const parsed = parseWebUrlInfo(url || '', title);
   const effectiveTitle = title || parsed.suggestedTitle;
   const isDirectVideo = parsed.isDirectVideoFile;
-  const isDouyin = Boolean(parsed.siteName.includes('抖音') || url?.toLowerCase().includes('douyin'));
-  // For Douyin, every externally visible URL must be the canonical mobile share URL
-  // after server-side resolution. Other sites continue to use their original URL.
-  const effectiveDouyinUrl = resolvedMDouyinUrl || parsed.embedUrl || resolvedPcUrl || parsed.url;
-  const displayUrl = isDouyin ? effectiveDouyinUrl : parsed.url;
+  const isDouyin = parsed.siteName.includes('抖音') || (url && url.toLowerCase().includes('douyin'));
 
   // Resolve Douyin short links & video IDs
   useEffect(() => {
     if (!isOpen || !url || !isDouyin) {
       setResolvedEmbedUrl(null);
       setResolvedPcUrl(null);
-      setResolvedMDouyinUrl(null);
       setIsResolvingDouyin(false);
       return;
     }
@@ -66,9 +61,6 @@ export const WebBrowserModal: React.FC<WebBrowserModalProps> = ({
     resolveDouyinUrl(url).then((res) => {
       if (!isMounted) return;
       setIsResolvingDouyin(false);
-      if (res.mDouyinUrl) {
-        setResolvedMDouyinUrl(res.mDouyinUrl);
-      }
       if (res.openEmbedUrl) {
         setResolvedEmbedUrl(res.openEmbedUrl);
       }
@@ -127,7 +119,7 @@ export const WebBrowserModal: React.FC<WebBrowserModalProps> = ({
 
   const handleCopy = async () => {
     try {
-      await navigator.clipboard.writeText(displayUrl);
+      await navigator.clipboard.writeText(url);
       setIsCopied(true);
       setTimeout(() => setIsCopied(false), 2000);
     } catch {
@@ -136,7 +128,7 @@ export const WebBrowserModal: React.FC<WebBrowserModalProps> = ({
   };
 
   const handleOpenExternal = () => {
-    window.open(displayUrl, '_blank', 'noopener,noreferrer');
+    window.open(url, '_blank', 'noopener,noreferrer');
   };
 
   return (
@@ -209,7 +201,7 @@ export const WebBrowserModal: React.FC<WebBrowserModalProps> = ({
           <div className="hidden md:flex flex-1 max-w-xl mx-2 items-center gap-1.5 px-3 py-1 bg-white/90 border border-[#D5CCC0] rounded-xl text-xs text-[#52463A] shadow-2xs">
             <Lock className="w-3 h-3 text-[#7B6E60] shrink-0" />
             <span className="truncate flex-1 font-mono text-[11px] select-all">
-              {displayUrl}
+              {parsed.url}
             </span>
           </div>
 
@@ -228,7 +220,7 @@ export const WebBrowserModal: React.FC<WebBrowserModalProps> = ({
               type="button"
               onClick={handleCopy}
               className="p-1.5 rounded-lg text-[#6B5E50] hover:text-[#2A231C] hover:bg-[#E2D8CC] transition-colors"
-              title="复制当前网址"
+              title="复制原网页网址"
             >
               {isCopied ? <Check className="w-4 h-4 text-[#2E7D32]" /> : <Copy className="w-4 h-4" />}
             </button>
@@ -267,34 +259,58 @@ export const WebBrowserModal: React.FC<WebBrowserModalProps> = ({
         <div className="flex md:hidden items-center gap-1.5 px-3 py-1.5 bg-[#F4EFE7] border-b border-[#E0D7CB] text-xs text-[#52463A]">
           <Lock className="w-3 h-3 text-[#7B6E60] shrink-0" />
           <span className="truncate flex-1 font-mono text-[11px] select-all">
-            {displayUrl}
+            {parsed.url}
           </span>
         </div>
 
         {/* Web Browser Frame Content */}
         <div className="flex-1 bg-white relative overflow-hidden flex flex-col">
           {isDouyin && (
-            <div className="bg-[#FEF2F2] border-b border-[#FCA5A5] px-3.5 py-2 text-[11px] text-[#991B1B] flex items-center justify-between shrink-0 gap-2 flex-wrap">
-              <div className="flex items-center gap-1.5 font-medium">
+            <div className="bg-[#FFF8F0] border-b border-[#FCD34D] px-3 py-2 text-[11px] text-[#78350F] flex items-center justify-between shrink-0 gap-2 flex-wrap">
+              <div className="flex items-center gap-1.5">
                 {isResolvingDouyin ? (
-                  <Loader2 className="w-3.5 h-3.5 text-[#DC2626] animate-spin shrink-0" />
+                  <Loader2 className="w-3.5 h-3.5 text-[#D97706] animate-spin shrink-0" />
                 ) : (
-                  <ShieldCheck className="w-4 h-4 text-[#16A34A] shrink-0" />
+                  <ShieldCheck className="w-3.5 h-3.5 text-[#16A34A] shrink-0" />
                 )}
                 <span>
                   {isResolvingDouyin
-                    ? '正在智能自动转换至第三阶段手机网页网址...'
-                    : '已自动转换为第三阶段手机浏览网页模式 (m.douyin.com/share/video/)'}
+                    ? '正在解析抖音短链与 19 位视频 ID...'
+                    : '已切换至原生网络直连（避开代理 404），可自由选择视图：'}
                 </span>
               </div>
-              <a
-                href={resolvedMDouyinUrl || resolvedPcUrl || parsed.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="px-2.5 py-1 rounded-md text-[11px] font-semibold bg-[#DC2626] text-white hover:bg-[#B91C1C] flex items-center gap-1 shadow-sm transition-colors shrink-0"
-              >
-                🚀 手机网页模式直达 (m.douyin.com) <ExternalLink className="w-3 h-3" />
-              </a>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => setDouyinPlayerMode('open')}
+                  className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors ${
+                    douyinPlayerMode === 'open'
+                      ? 'bg-[#D97706] text-white shadow-sm'
+                      : 'bg-white text-[#78350F] border border-[#FCD34D] hover:bg-[#FEF3C7]'
+                  }`}
+                >
+                  🎬 官方无框播放器
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDouyinPlayerMode('pc')}
+                  className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors ${
+                    douyinPlayerMode === 'pc'
+                      ? 'bg-[#D97706] text-white shadow-sm'
+                      : 'bg-white text-[#78350F] border border-[#FCD34D] hover:bg-[#FEF3C7]'
+                  }`}
+                >
+                  🖥️ PC 桌面版网页
+                </button>
+                <a
+                  href={resolvedPcUrl || parsed.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-2.5 py-1 rounded-md text-[11px] font-semibold bg-[#DC2626] text-white hover:bg-[#B91C1C] flex items-center gap-1 shadow-sm transition-colors"
+                >
+                  🚀 在手机浏览器直接打开 PC 桌面版 <ExternalLink className="w-3 h-3" />
+                </a>
+              </div>
             </div>
           )}
 
@@ -312,10 +328,12 @@ export const WebBrowserModal: React.FC<WebBrowserModalProps> = ({
             </div>
           ) : (
             <iframe
-              key={`${iframeKey}-${resolvedMDouyinUrl || ''}-${resolvedPcUrl || ''}`}
+              key={`${iframeKey}-${douyinPlayerMode}-${resolvedEmbedUrl || ''}-${resolvedPcUrl || ''}`}
               src={
                 isDouyin
-                  ? effectiveDouyinUrl
+                  ? douyinPlayerMode === 'open'
+                    ? resolvedEmbedUrl || parsed.embedUrl || parsed.url
+                    : resolvedPcUrl || parsed.url
                   : parsed.embedUrl || parsed.url
               }
               title={effectiveTitle}
