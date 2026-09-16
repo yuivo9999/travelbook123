@@ -44,7 +44,11 @@ export const WebBrowserModal: React.FC<WebBrowserModalProps> = ({
   const parsed = parseWebUrlInfo(url || '', title);
   const effectiveTitle = title || parsed.suggestedTitle;
   const isDirectVideo = parsed.isDirectVideoFile;
-  const isDouyin = parsed.siteName.includes('抖音') || (url && url.toLowerCase().includes('douyin'));
+  const isDouyin = Boolean(parsed.siteName.includes('抖音') || url?.toLowerCase().includes('douyin'));
+  // For Douyin, every externally visible URL must be the canonical mobile share URL
+  // after server-side resolution. Other sites continue to use their original URL.
+  const effectiveDouyinUrl = resolvedMDouyinUrl || parsed.embedUrl || resolvedPcUrl || parsed.url;
+  const displayUrl = isDouyin ? effectiveDouyinUrl : parsed.url;
 
   // Resolve Douyin short links & video IDs
   useEffect(() => {
@@ -123,8 +127,7 @@ export const WebBrowserModal: React.FC<WebBrowserModalProps> = ({
 
   const handleCopy = async () => {
     try {
-      const targetUrl = resolvedMDouyinUrl || resolvedPcUrl || url;
-      await navigator.clipboard.writeText(targetUrl);
+      await navigator.clipboard.writeText(displayUrl);
       setIsCopied(true);
       setTimeout(() => setIsCopied(false), 2000);
     } catch {
@@ -133,11 +136,8 @@ export const WebBrowserModal: React.FC<WebBrowserModalProps> = ({
   };
 
   const handleOpenExternal = () => {
-    const targetUrl = resolvedMDouyinUrl || resolvedPcUrl || url;
-    window.open(targetUrl, '_blank', 'noopener,noreferrer');
+    window.open(displayUrl, '_blank', 'noopener,noreferrer');
   };
-
-  const displayAddressUrl = isDouyin ? (resolvedMDouyinUrl || resolvedPcUrl || parsed.url) : parsed.url;
 
   return (
     <div
@@ -209,7 +209,7 @@ export const WebBrowserModal: React.FC<WebBrowserModalProps> = ({
           <div className="hidden md:flex flex-1 max-w-xl mx-2 items-center gap-1.5 px-3 py-1 bg-white/90 border border-[#D5CCC0] rounded-xl text-xs text-[#52463A] shadow-2xs">
             <Lock className="w-3 h-3 text-[#7B6E60] shrink-0" />
             <span className="truncate flex-1 font-mono text-[11px] select-all">
-              {displayAddressUrl}
+              {displayUrl}
             </span>
           </div>
 
@@ -228,7 +228,7 @@ export const WebBrowserModal: React.FC<WebBrowserModalProps> = ({
               type="button"
               onClick={handleCopy}
               className="p-1.5 rounded-lg text-[#6B5E50] hover:text-[#2A231C] hover:bg-[#E2D8CC] transition-colors"
-              title="复制原网页网址"
+              title="复制当前网址"
             >
               {isCopied ? <Check className="w-4 h-4 text-[#2E7D32]" /> : <Copy className="w-4 h-4" />}
             </button>
@@ -267,7 +267,7 @@ export const WebBrowserModal: React.FC<WebBrowserModalProps> = ({
         <div className="flex md:hidden items-center gap-1.5 px-3 py-1.5 bg-[#F4EFE7] border-b border-[#E0D7CB] text-xs text-[#52463A]">
           <Lock className="w-3 h-3 text-[#7B6E60] shrink-0" />
           <span className="truncate flex-1 font-mono text-[11px] select-all">
-            {displayAddressUrl}
+            {displayUrl}
           </span>
         </div>
 
@@ -315,7 +315,7 @@ export const WebBrowserModal: React.FC<WebBrowserModalProps> = ({
               key={`${iframeKey}-${resolvedMDouyinUrl || ''}-${resolvedPcUrl || ''}`}
               src={
                 isDouyin
-                  ? resolvedMDouyinUrl || parsed.embedUrl || resolvedPcUrl || parsed.url
+                  ? effectiveDouyinUrl
                   : parsed.embedUrl || parsed.url
               }
               title={effectiveTitle}
