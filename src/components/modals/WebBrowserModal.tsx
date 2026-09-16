@@ -275,7 +275,7 @@ export const WebBrowserModal: React.FC<WebBrowserModalProps> = ({
                 <span>
                   {isResolvingDouyin
                     ? '正在智能解析抖音视频链接...'
-                    : '手机原生 PC 模式：已为您拦截去 APP 打开视频的动作与跳转，开启纯净网页播放'}
+                    : '已启用无痕纯净播放模式（Cookie隔离 + 拦截APP强行跳转），普通浏览模式亦可直接播放'}
                 </span>
               </div>
               <a
@@ -303,8 +303,12 @@ export const WebBrowserModal: React.FC<WebBrowserModalProps> = ({
             </div>
           ) : (
             <iframe
-              key={`${iframeKey}-${resolvedPcUrl || ''}`}
-              src={isDouyin ? resolvedPcUrl || parsed.url : parsed.embedUrl || parsed.url}
+              key={`${iframeKey}-${resolvedEmbedUrl || ''}-${resolvedPcUrl || ''}`}
+              src={
+                isDouyin
+                  ? resolvedEmbedUrl || parsed.embedUrl || resolvedPcUrl || parsed.url
+                  : parsed.embedUrl || parsed.url
+              }
               title={effectiveTitle}
               referrerPolicy="no-referrer"
               className="w-full h-full border-0 bg-white"
