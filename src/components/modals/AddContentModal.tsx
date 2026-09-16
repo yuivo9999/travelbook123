@@ -9,6 +9,7 @@ interface AddContentModalProps {
   onSelectImage: (file: File, fileHandle?: any) => void;
   onSelectVideo: (file: File, fileHandle?: any) => void;
   onAddUrlMedia?: (url: string, type: 'image' | 'video', customName?: string) => void;
+  onAddWebpage?: (url: string, title?: string) => void;
 }
 
 export const AddContentModal: React.FC<AddContentModalProps> = ({
@@ -18,12 +19,13 @@ export const AddContentModal: React.FC<AddContentModalProps> = ({
   onSelectImage,
   onSelectVideo,
   onAddUrlMedia,
+  onAddWebpage,
 }) => {
   const [activeTab, setActiveTab] = useState<'menu' | 'text' | 'url'>('menu');
   const [textContent, setTextContent] = useState('');
   const [selectedColor, setSelectedColor] = useState<'yellow' | 'white' | 'blue' | 'pink' | 'kraft'>('yellow');
   const [urlInput, setUrlInput] = useState('');
-  const [urlType, setUrlType] = useState<'image' | 'video'>('image');
+  const [urlType, setUrlType] = useState<'webpage' | 'image' | 'video'>('webpage');
   const [urlName, setUrlName] = useState('');
 
   const imageInputRef = useRef<HTMLInputElement>(null);
@@ -73,7 +75,13 @@ export const AddContentModal: React.FC<AddContentModalProps> = ({
 
   const handleConfirmUrl = () => {
     if (!urlInput.trim()) return;
-    if (onAddUrlMedia) {
+    if (urlType === 'webpage') {
+      if (onAddWebpage) {
+        onAddWebpage(urlInput.trim(), urlName.trim() || undefined);
+      } else if (onAddUrlMedia) {
+        onAddUrlMedia(urlInput.trim(), 'video', urlName.trim() || undefined);
+      }
+    } else if (onAddUrlMedia) {
       onAddUrlMedia(urlInput.trim(), urlType, urlName.trim() || undefined);
     }
     handleClose();
@@ -259,54 +267,100 @@ export const AddContentModal: React.FC<AddContentModalProps> = ({
           </div>
         ) : (
           <div className="flex flex-col gap-3 py-4">
-            <div className="flex items-center gap-2">
+            {/* Link Type Selector */}
+            <div className="flex items-center gap-1.5 p-1 bg-[#EFE8DD] rounded-xl">
+              <button
+                type="button"
+                onClick={() => setUrlType('webpage')}
+                className={`flex-1 py-1.5 px-2 text-xs font-semibold rounded-lg transition-all flex items-center justify-center gap-1 ${
+                  urlType === 'webpage'
+                    ? 'bg-[#4A4036] text-white shadow-xs'
+                    : 'text-[#5A4E42] hover:bg-[#E5DDCF]'
+                }`}
+              >
+                <Globe className="w-3.5 h-3.5" />
+                <span>网页网址</span>
+              </button>
               <button
                 type="button"
                 onClick={() => setUrlType('image')}
-                className={`flex-1 py-1.5 text-xs font-semibold rounded-lg border transition-all ${
+                className={`flex-1 py-1.5 px-2 text-xs font-semibold rounded-lg transition-all flex items-center justify-center gap-1 ${
                   urlType === 'image'
-                    ? 'bg-[#4A4036] text-white border-[#4A4036]'
-                    : 'bg-[#EFE8DD] text-[#5A4E42] border-[#E0D7CB]'
+                    ? 'bg-[#4A4036] text-white shadow-xs'
+                    : 'text-[#5A4E42] hover:bg-[#E5DDCF]'
                 }`}
               >
-                图片地址 (URL)
+                <ImageIcon className="w-3.5 h-3.5" />
+                <span>直链图片</span>
               </button>
               <button
                 type="button"
                 onClick={() => setUrlType('video')}
-                className={`flex-1 py-1.5 text-xs font-semibold rounded-lg border transition-all ${
+                className={`flex-1 py-1.5 px-2 text-xs font-semibold rounded-lg transition-all flex items-center justify-center gap-1 ${
                   urlType === 'video'
-                    ? 'bg-[#4A4036] text-white border-[#4A4036]'
-                    : 'bg-[#EFE8DD] text-[#5A4E42] border-[#E0D7CB]'
+                    ? 'bg-[#4A4036] text-white shadow-xs'
+                    : 'text-[#5A4E42] hover:bg-[#E5DDCF]'
                 }`}
               >
-                视频地址 (URL)
+                <VideoIcon className="w-3.5 h-3.5" />
+                <span>直链视频</span>
               </button>
             </div>
 
             <div>
-              <label className="block text-[11px] font-medium text-[#73685C] mb-1">原文件网络地址或本地服务路径：</label>
+              <label className="block text-[11px] font-medium text-[#73685C] mb-1">
+                {urlType === 'webpage'
+                  ? '网页地址或视频网站链接：'
+                  : urlType === 'image'
+                  ? '图片原文件网络地址 (URL)：'
+                  : '视频原文件网络地址 (MP4/WebM URL)：'}
+              </label>
               <input
                 type="url"
                 value={urlInput}
                 onChange={(e) => setUrlInput(e.target.value)}
-                placeholder="https://... 或 http://localhost:8080/..."
+                placeholder={
+                  urlType === 'webpage'
+                    ? 'https://www.bilibili.com/video/... 或 https://... 或 任意网页'
+                    : urlType === 'image'
+                    ? 'https://.../photo.jpg'
+                    : 'https://.../video.mp4'
+                }
+                autoFocus
                 className="w-full px-3 py-2 text-xs rounded-xl bg-white border border-[#DCD3C7] text-[#2D2721] focus:outline-hidden focus:ring-2 focus:ring-[#8C7A68]"
               />
             </div>
 
             <div>
-              <label className="block text-[11px] font-medium text-[#73685C] mb-1">文件名称 (选填)：</label>
+              <label className="block text-[11px] font-medium text-[#73685C] mb-1">
+                {urlType === 'webpage' ? '网页标题 (选填，留空自动提取)：' : '文件名称 (选填)：'}
+              </label>
               <input
                 type="text"
                 value={urlName}
                 onChange={(e) => setUrlName(e.target.value)}
-                placeholder={urlType === 'image' ? 'photo.jpg' : 'video.mp4'}
+                placeholder={
+                  urlType === 'webpage'
+                    ? '例如：旅行记录视频 / 攻略文章'
+                    : urlType === 'image'
+                    ? 'photo.jpg'
+                    : 'video.mp4'
+                }
                 className="w-full px-3 py-2 text-xs rounded-xl bg-white border border-[#DCD3C7] text-[#2D2721] focus:outline-hidden focus:ring-2 focus:ring-[#8C7A68]"
               />
             </div>
 
-            <div className="flex items-center justify-end gap-2 pt-2">
+            {/* Feature Tip */}
+            {urlType === 'webpage' && (
+              <div className="p-2.5 rounded-xl bg-[#EDF4F9] border border-[#D0DFEB] text-[11px] text-[#2F5E82] leading-relaxed flex items-start gap-1.5">
+                <Globe className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                <span>
+                  贴入后将生成网页书签卡片。点击即可在手账内置窗口中<b>浏览网页</b>及<b>播放网页视频</b>，还支持自由缩放、旋转与拖拽摆放。
+                </span>
+              </div>
+            )}
+
+            <div className="flex items-center justify-end gap-2 pt-1">
               <button
                 type="button"
                 onClick={() => setActiveTab('menu')}

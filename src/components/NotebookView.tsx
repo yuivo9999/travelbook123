@@ -50,13 +50,16 @@ function inferMimeType(file: File, defaultType: string): string {
 import { TextItem } from './items/TextItem';
 import { ImageItem } from './items/ImageItem';
 import { VideoItem } from './items/VideoItem';
+import { WebpageItem } from './items/WebpageItem';
 import { AddContentModal } from './modals/AddContentModal';
 import { ImageViewerModal } from './modals/ImageViewerModal';
 import { VideoPlayerModal } from './modals/VideoPlayerModal';
+import { WebBrowserModal } from './modals/WebBrowserModal';
 import { ConfirmDialog } from './modals/ConfirmDialog';
 import { EditCoverModal } from './modals/EditCoverModal';
 import { PaperStyle, AppSettings } from '../types';
 import { PAPER_PATTERNS } from '../utils/settings';
+import { parseWebUrlInfo } from '../utils/webpage';
 
 interface NotebookViewProps {
   notebook: Notebook;
@@ -84,6 +87,7 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
   const [isCoverModalOpen, setIsCoverModalOpen] = useState(false);
   const [previewImageId, setPreviewImageId] = useState<string | null>(null);
   const [previewVideoId, setPreviewVideoId] = useState<string | null>(null);
+  const [previewWebUrl, setPreviewWebUrl] = useState<{ url: string; title?: string } | null>(null);
   const [itemToDelete, setItemToDelete] = useState<{ id: string; mediaId?: string } | null>(null);
 
   // Rename modal
@@ -549,6 +553,50 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
     } catch (err) {
       console.error('添加网络媒体失败', err);
       showToast('添加网络媒体失败', 'error');
+    }
+  };
+
+  // 5. Add Webpage URL Bookmark & Embedded Video/Web Card
+  const handleAddWebpage = async (url: string, customTitle?: string) => {
+    try {
+      showToast('正在解析并生成网页卡片...', 'info');
+      const parsed = parseWebUrlInfo(url, customTitle);
+      const cardWidth = Math.min(270, canvasWidth - 32);
+      const cardHeight = 220;
+
+      const { x, y, rotation } = getNextSpawnCoordinates(cardWidth, cardHeight);
+      const newZ = ++maxZIndexRef.current;
+
+      const newItem: ContentItem = {
+        id: 'item_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),
+        notebookId: notebook.id,
+        type: 'webpage',
+        sourceUrl: parsed.url,
+        fileName: customTitle || parsed.suggestedTitle,
+        pageTitle: customTitle || parsed.suggestedTitle,
+        siteName: parsed.siteName,
+        faviconUrl: parsed.faviconUrl,
+        isVideoSite: parsed.isVideoSite,
+        x,
+        y,
+        width: cardWidth,
+        height: cardHeight,
+        rotation,
+        zIndex: newZ,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      };
+
+      await saveItem(newItem);
+      setItems((prev) => [...prev, newItem]);
+      showToast('已成功贴上网页卡片 (点击即可在窗口中浏览与播放视频)', 'success');
+
+      if (y > window.scrollY + window.innerHeight - 200) {
+        window.scrollTo({ top: y - 100, behavior: 'smooth' });
+      }
+    } catch (err) {
+      console.error('添加网页链接失败', err);
+      showToast('添加网页链接失败', 'error');
     }
   };
 
@@ -1256,6 +1304,23 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
               );
             }
 
+            if (item.type === 'webpage') {
+              return (
+                <WebpageItem
+                  key={item.id}
+                  item={item}
+                  canvasWidth={canvasWidth}
+                  onDragStart={handleDragStart}
+                  onRotateStart={handleRotateStart}
+                  onResizeStart={handleResizeStart}
+                  onResetTransform={handleResetTransform}
+                  onBringToFront={handleBringToFront}
+                  onOpenWebpage={(url, title) => setPreviewWebUrl({ url, title })}
+                  onDelete={(id) => setItemToDelete({ id })}
+                />
+              );
+            }
+
             return null;
           })}
         </div>
@@ -1311,6 +1376,7 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
         onSelectImage={handleAddImage}
         onSelectVideo={handleAddVideo}
         onAddUrlMedia={handleAddUrlMedia}
+        onAddWebpage={handleAddWebpage}
       />
 
       {/* Fullsize Image Viewer Modal */}
@@ -1325,6 +1391,14 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
         isOpen={Boolean(previewVideoId)}
         mediaId={previewVideoId || undefined}
         onClose={() => setPreviewVideoId(null)}
+      />
+
+      {/* Web Browser & Video Player Modal */}
+      <WebBrowserModal
+        isOpen={Boolean(previewWebUrl)}
+        url={previewWebUrl?.url}
+        title={previewWebUrl?.title}
+        onClose={() => setPreviewWebUrl(null)}
       />
 
       {/* Item Delete Confirm Dialog */}

@@ -1,4 +1,4 @@
-export type ItemType = 'text' | 'image' | 'video';
+export type ItemType = 'text' | 'image' | 'video' | 'webpage';
 
 export type BackgroundSkin =
   | 'warm-kraft'
@@ -66,6 +66,10 @@ export interface ContentItem {
   noteColor?: 'yellow' | 'white' | 'blue' | 'pink' | 'kraft';
   sourceUrl?: string;
   fileName?: string;
+  pageTitle?: string;
+  faviconUrl?: string;
+  siteName?: string;
+  isVideoSite?: boolean;
 }
 
 export interface MediaRecord {
