@@ -195,10 +195,10 @@ export function parseWebUrlInfo(rawUrl: string, customTitle?: string): ParsedWeb
     isVideoSite = true;
     siteName = '抖音 Douyin';
     const douyinMatch =
-      pathname.match(/\/(?:share\/video|video|modal\/video)\/(\d{15,25})(?:\/|[?#]|$)/i) ||
-      url.match(/\/(?:share\/video|video|modal\/video)\/(\d{15,25})(?:\/|[?#]|$)/i);
+      pathname.match(/\/(?:share\/video|video|modal\/video)\/(\d+)/i) ||
+      url.match(/video\/(\d+)/i);
     if (douyinMatch && douyinMatch[1]) {
-      embedUrl = `https://m.douyin.com/share/video/${douyinMatch[1]}`;
+      embedUrl = `https://open.douyin.com/player/video?vid=${douyinMatch[1]}`;
     }
   }
 
@@ -226,7 +226,6 @@ export function parseWebUrlInfo(rawUrl: string, customTitle?: string): ParsedWeb
 
 export async function resolveDouyinUrl(rawUrl: string): Promise<{
   videoId?: string;
-  mDouyinUrl?: string;
   openEmbedUrl?: string;
   pcUrl?: string;
   finalUrl?: string;
@@ -238,7 +237,6 @@ export async function resolveDouyinUrl(rawUrl: string): Promise<{
       const data = await res.json();
       return {
         videoId: data.videoId,
-        mDouyinUrl: data.mDouyinUrl,
         openEmbedUrl: data.openEmbedUrl,
         pcUrl: data.pcUrl,
         finalUrl: data.finalUrl,
