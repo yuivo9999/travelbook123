@@ -46,9 +46,7 @@ export default function App() {
     }
   }, [showToast]);
 
-  useEffect(() => {
-    refreshNotebooks();
-  }, [refreshNotebooks]);
+  useEffect(() => { refreshNotebooks(); }, [refreshNotebooks]);
 
   useEffect(() => {
     if (!activeNotebookId) {
@@ -173,7 +171,7 @@ export default function App() {
           id="btn-home-import-backup"
           onClick={handleHomeImportClick}
           disabled={isHomeParsing}
-          className="fixed top-3 right-[5.75rem] z-[2000] w-9 h-9 rounded-xl bg-white/90 hover:bg-white border border-[#DDD4C7] text-[#4A3F35] flex items-center justify-center transition-all active:scale-95 shadow-sm disabled:opacity-60"
+          className="fixed top-3 right-[6.25rem] z-[2000] w-9 h-9 rounded-xl bg-white/90 hover:bg-white border border-[#DDD4C7] text-[#4A3F35] flex items-center justify-center transition-all active:scale-95 shadow-sm disabled:opacity-60"
           title="导入存档"
           aria-label="导入存档"
         >
