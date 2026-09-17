@@ -49,10 +49,10 @@ function inferMimeType(file: File, defaultType: string): string {
   if (ext === 'ogv') return 'video/ogg';
   return defaultType;
 }
-import { TextItem } from './items/TextItem';
-import { ImageItem } from './items/ImageItem';
-import { VideoItem } from './items/VideoItem';
-import { WebpageItem } from './items/WebpageItem';
+import { TextItem } from './common/TextItem';
+import { ImageItem } from './common/ImageItem';
+import { VideoItem } from './common/VideoItem';
+import { WebpageItem } from './common/WebpageItem';
 import { AddContentModal } from './modals/AddContentModal';
 import { ImageViewerModal } from './modals/ImageViewerModal';
 import { VideoPlayerModal } from './modals/VideoPlayerModal';
