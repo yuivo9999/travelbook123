@@ -1350,7 +1350,6 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
                   onRotateStart={handleRotateStart}
                   onResizeStart={handleResizeStart}
                   onResetTransform={handleResetTransform}
-                  onTogglePin={handleTogglePin}
                   onBringToFront={handleBringToFront}
                   onViewImage={handleViewImage}
                   onDelete={handleDelete}
