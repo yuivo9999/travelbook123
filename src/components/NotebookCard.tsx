@@ -1,0 +1,119 @@
+import React from 'react';
+import {
+  Book,
+  Calendar,
+  Layers,
+  Trash2,
+  Download,
+  Palette,
+  FileText,
+} from 'lucide-react';
+import { Notebook } from '../types';
+import { formatDate } from '../utils/media';
+
+interface NotebookCardProps {
+  notebook: Notebook;
+  onOpen: (id: string) => void;
+  onDeleteRequest: (notebook: Notebook) => void;
+  onExportRequest?: (notebook: Notebook) => void;
+  onEditCoverRequest?: (notebook: Notebook) => void;
+}
+
+export const NotebookCard: React.FC<NotebookCardProps> = ({
+  notebook,
+  onOpen,
+  onDeleteRequest,
+  onExportRequest,
+  onEditCoverRequest,
+}) => {
+  const showTextImage = notebook.coverType === 'text' && Boolean(notebook.coverText);
+
+  return (
+    <div
+      id={`notebook-card-${notebook.id}`}
+      onClick={() => onOpen(notebook.id)}
+      className="group relative bg-[#FAF7F2] rounded-2xl border border-[#E3DDD4] p-4 shadow-[var(--scrap-shadow)] hover:shadow-[var(--scrap-hover)] transition-all duration-200 cursor-pointer flex flex-col justify-between overflow-hidden active:scale-[0.99]"
+    >
+      {/* Book spine decorative accent */}
+      <div className="absolute left-0 top-0 bottom-0 w-2.5 bg-[#8C7A68]/40 border-r border-[#8C7A68]/20" />
+
+      <div className="pl-2 flex flex-col gap-2.5">
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="w-8 h-8 rounded-lg bg-[#EFE9E0] text-[#594E42] flex items-center justify-center shrink-0 border border-[#E0D7CC]">
+              <Book className="w-4 h-4" />
+            </div>
+            <h3 className="text-base font-semibold text-[#2D2721] line-clamp-1 group-hover:text-[#644B32] transition-colors">
+              {notebook.title}
+            </h3>
+          </div>
+
+          <div className="flex items-center gap-0.5 shrink-0">
+            {onEditCoverRequest && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onEditCoverRequest(notebook);
+                }}
+                className="p-1.5 rounded-lg text-[#998E84] hover:text-[#4A3F35] hover:bg-[#F0EAE1] transition-colors"
+                title="设置封面外观 (无文字/有文字)"
+              >
+                <Palette className="w-4 h-4" />
+              </button>
+            )}
+            {onExportRequest && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onExportRequest(notebook);
+                }}
+                className="p-1.5 rounded-lg text-[#998E84] hover:text-[#4A3F35] hover:bg-[#F0EAE1] transition-colors"
+                title="导出这本手账"
+              >
+                <Download className="w-4 h-4" />
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onDeleteRequest(notebook);
+              }}
+              className="p-1.5 rounded-lg text-[#998E84] hover:text-[#C5221F] hover:bg-[#F0EAE1] transition-colors"
+              title="删除手账"
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+
+        {/* Custom Text Cover Preview */}
+        {showTextImage && (
+          <div className="w-full min-h-20 p-3 rounded-lg bg-[#FAF5EC] border border-[#E8DFC2] flex flex-col justify-center">
+            <div className="flex items-center gap-1 text-[10px] text-[#A89480] font-serif italic mb-1">
+              <FileText className="w-3 h-3" />
+              <span>封面寄语</span>
+            </div>
+            <p className="text-xs text-[#4A3F35] leading-relaxed line-clamp-3 font-medium">
+              {notebook.coverText}
+            </p>
+          </div>
+        )}
+
+        {/* Meta details */}
+        <div className="flex items-center justify-between text-xs text-[#7A6F64] pt-1">
+          <div className="flex items-center gap-1.5">
+            <Calendar className="w-3.5 h-3.5 opacity-70" />
+            <span>{formatDate(notebook.createdAt)}</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <Layers className="w-3.5 h-3.5 opacity-70" />
+            <span>{notebook.itemCount ?? 0} 条资料</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
