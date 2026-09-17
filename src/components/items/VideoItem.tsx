@@ -10,7 +10,7 @@ import {
   Maximize2,
 } from 'lucide-react';
 import { ContentItem } from '../../types';
-import { getMedia } from '../../db/indexedDB';
+import { getMedia } from '../../db/store';
 import { formatDuration, createSafeBlobUrl, getSessionFile } from '../../utils/media';
 
 // Memory cache for video thumbnails & streams

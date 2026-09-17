@@ -13,7 +13,7 @@ import {
   Layers,
 } from 'lucide-react';
 import { Notebook } from '../../types';
-import { getAllNotebooks, getItemsByNotebook } from '../../db/indexedDB';
+import { getAllNotebooks, getItemsByNotebook } from '../../db/store';
 import { exportScrapbookData, ExportMode } from '../../utils/exportImport';
 
 interface ExportModalProps {

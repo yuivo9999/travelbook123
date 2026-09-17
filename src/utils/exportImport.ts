@@ -7,7 +7,7 @@ import {
   saveNotebook,
   saveItem,
   saveMedia,
-} from '../db/indexedDB';
+} from '../db/store';
 
 export interface ExportedMedia {
   id: string;

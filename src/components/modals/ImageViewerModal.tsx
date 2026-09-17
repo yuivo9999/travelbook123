@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { X, Loader2, AlertTriangle, RefreshCw, FolderSearch, Link2 } from 'lucide-react';
-import { getMedia, updateMediaSource } from '../../db/indexedDB';
+import { getMedia, updateMediaSource } from '../../db/store';
 import { resolveOriginalMedia, registerSessionFile, pickFilesViaPicker } from '../../utils/media';
 
 interface ImageViewerModalProps {

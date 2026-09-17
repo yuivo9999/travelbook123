@@ -14,7 +14,7 @@ import {
   Layers,
 } from 'lucide-react';
 import { Notebook, CoverType } from '../../types';
-import { getItemsByNotebook, getMedia } from '../../db/indexedDB';
+import { getItemsByNotebook, getMedia } from '../../db/store';
 import { createSafeBlobUrl, formatDate } from '../../utils/media';
 
 interface EditCoverModalProps {

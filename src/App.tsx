@@ -5,7 +5,7 @@ import {
   saveNotebook,
   deleteNotebook,
   getNotebook,
-} from './db/indexedDB';
+} from './db/store';
 import { NotebookShelf } from './components/NotebookShelf';
 import { NotebookView } from './components/NotebookView';
 import { ToastContainer, ToastMessage } from './components/common/Toast';

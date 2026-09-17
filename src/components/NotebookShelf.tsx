@@ -5,7 +5,7 @@ import { NotebookCard } from './NotebookCard';
 import { ConfirmDialog } from './modals/ConfirmDialog';
 import { ExportModal } from './modals/ExportModal';
 import { EditCoverModal } from './modals/EditCoverModal';
-import { saveNotebook } from '../db/indexedDB';
+import { saveNotebook } from '../db/store';
 
 interface NotebookShelfProps {
   notebooks: Notebook[];

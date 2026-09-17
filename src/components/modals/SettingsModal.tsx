@@ -25,7 +25,7 @@ import {
   getStorageQuotaInfo,
 } from '../../utils/settings';
 import { parseBackupFile, ScrapbookBackup } from '../../utils/exportImport';
-import { getDatabaseStats, clearAllDatabaseData } from '../../db/indexedDB';
+import { getDatabaseStats, clearAllDatabaseData } from '../../db/store';
 import { playMechanicalTick } from '../../utils/rotationSound';
 import { ExportModal } from './ExportModal';
 import { ImportModal } from './ImportModal';

@@ -1,5 +1,5 @@
 import { AppSettings, BackgroundSkin, PaperStyle, Notebook, ContentItem } from '../types';
-import { getAllNotebooks, getAllItems, saveNotebook, saveItem } from '../db/indexedDB';
+import { getAllNotebooks, getAllItems, saveNotebook, saveItem } from '../db/store';
 
 const SETTINGS_STORAGE_KEY = 'travelbook_app_settings_v1';
 

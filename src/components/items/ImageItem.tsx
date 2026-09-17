@@ -9,7 +9,7 @@ import {
   RotateCcw,
 } from 'lucide-react';
 import { ContentItem } from '../../types';
-import { getMedia } from '../../db/indexedDB';
+import { getMedia } from '../../db/store';
 import { createSafeBlobUrl, getSessionFile, formatDate } from '../../utils/media';
 
 // In-memory cache for media URLs so items don't flicker or get revoked during re-renders/dragging

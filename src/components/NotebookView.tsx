@@ -26,7 +26,7 @@ import {
   deleteItem,
   saveMedia,
   saveNotebook,
-} from '../db/indexedDB';
+} from '../db/store';
 import { playMechanicalTick } from '../utils/rotationSound';
 import { processImageFile, processVideoFile, registerSessionFile } from '../utils/media';
 
@@ -121,6 +121,7 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
 
   // Track max zIndex
   const maxZIndexRef = useRef(10);
+  const batchSpawnRef = useRef({ count: 0, lastTime: 0 });
 
   // Dragging interaction state
   const draggingRef = useRef<{
@@ -306,20 +307,30 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
     const padding = 16;
     const maxAvailableWidth = Math.max(280, canvasWidth - itemWidth - padding);
 
+    const now = Date.now();
+    if (now - batchSpawnRef.current.lastTime < 1000) {
+      batchSpawnRef.current.count++;
+    } else {
+      batchSpawnRef.current.count = 0;
+    }
+    batchSpawnRef.current.lastTime = now;
+
+    const spawnIndex = items.length + batchSpawnRef.current.count;
+
     // If there are existing items, place in the currently visible viewport or below recent item
     const baseTop = Math.max(30, scrollY + 80);
 
     // Stagger X organically
-    const randomXOffset = (items.length % 2 === 0 ? 1 : -1) * (15 + (items.length * 12) % 40);
+    const randomXOffset = (spawnIndex % 2 === 0 ? 1 : -1) * (15 + (spawnIndex * 12) % 40);
     const centerX = (canvasWidth - itemWidth) / 2 + randomXOffset;
     const clampedX = Math.max(padding, Math.min(maxAvailableWidth, centerX));
 
     // Stagger Y slightly if overlapping
-    const clampedY = baseTop + ((items.length * 35) % 180);
+    const clampedY = baseTop + ((spawnIndex * 35) % 180) + (batchSpawnRef.current.count * 25);
 
     // Organic rotation between -2 and +2 degrees
     const rotations = [-1.5, 1, -0.8, 1.8, -1.2, 0.5, -2, 1.5];
-    const rotation = rotations[items.length % rotations.length];
+    const rotation = rotations[spawnIndex % rotations.length];
 
     return { x: Math.round(clampedX), y: Math.round(clampedY), rotation };
   };
@@ -350,16 +361,20 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
       };
 
       await saveItem(newItem);
-      const updatedItems = [...items, newItem];
-      setItems(updatedItems);
-
-      const updatedNotebook = {
-        ...notebook,
-        itemCount: updatedItems.length,
-        updatedAt: Date.now(),
-      };
-      await saveNotebook(updatedNotebook);
-      onUpdateNotebook(updatedNotebook);
+      setItems((prev) => {
+        const updatedItems = [...prev, newItem];
+        
+        const updatedNotebook = {
+          ...notebook,
+          itemCount: updatedItems.length,
+          updatedAt: Date.now(),
+        };
+        saveNotebook(updatedNotebook).then(() => {
+          onUpdateNotebook(updatedNotebook);
+        });
+        
+        return updatedItems;
+      });
 
       showToast('已贴上手账便签', 'success');
 
@@ -401,9 +416,9 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
 
       await saveMedia(mediaRecord);
 
-      // Compute display dimensions for scrapbook card
-      const cardWidth = Math.min(260, canvasWidth - 32);
-      const cardHeight = Math.round((cardWidth * (height || 200)) / (width || 260)) + 60;
+      // Compute display dimensions for scrapbook card (Half size)
+      const cardWidth = Math.min(140, canvasWidth - 32);
+      const cardHeight = Math.round((cardWidth * (height || 200)) / (width || 260)) + 40;
 
       const { x, y, rotation } = getNextSpawnCoordinates(cardWidth, cardHeight);
       const newZ = ++maxZIndexRef.current;
@@ -426,17 +441,22 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
       };
 
       await saveItem(newItem);
-      const updatedItems = [...items, newItem];
-      setItems(updatedItems);
-
-      const updatedNotebook = {
-        ...notebook,
-        itemCount: updatedItems.length,
-        coverImageId: notebook.coverImageId || mediaId,
-        updatedAt: Date.now(),
-      };
-      await saveNotebook(updatedNotebook);
-      onUpdateNotebook(updatedNotebook);
+      setItems((prev) => {
+        const updatedItems = [...prev, newItem];
+        
+        // Move notebook update logic here so it gets the correct length
+        const updatedNotebook = {
+          ...notebook,
+          itemCount: updatedItems.length,
+          coverImageId: notebook.coverImageId || mediaId,
+          updatedAt: Date.now(),
+        };
+        saveNotebook(updatedNotebook).then(() => {
+           onUpdateNotebook(updatedNotebook);
+        });
+        
+        return updatedItems;
+      });
 
       showToast('已成功贴上照片 (轻量化存储)', 'success');
 
@@ -479,8 +499,8 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
 
       await saveMedia(mediaRecord);
 
-      const cardWidth = Math.min(280, canvasWidth - 32);
-      const cardHeight = 220;
+      const cardWidth = Math.min(160, canvasWidth - 32);
+      const cardHeight = Math.round((cardWidth * (height || 9)) / (width || 16)) + 40;
 
       const { x, y, rotation } = getNextSpawnCoordinates(cardWidth, cardHeight);
       const newZ = ++maxZIndexRef.current;
@@ -503,16 +523,20 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
       };
 
       await saveItem(newItem);
-      const updatedItems = [...items, newItem];
-      setItems(updatedItems);
-
-      const updatedNotebook = {
-        ...notebook,
-        itemCount: updatedItems.length,
-        updatedAt: Date.now(),
-      };
-      await saveNotebook(updatedNotebook);
-      onUpdateNotebook(updatedNotebook);
+      setItems((prev) => {
+        const updatedItems = [...prev, newItem];
+        
+        const updatedNotebook = {
+          ...notebook,
+          itemCount: updatedItems.length,
+          updatedAt: Date.now(),
+        };
+        saveNotebook(updatedNotebook).then(() => {
+          onUpdateNotebook(updatedNotebook);
+        });
+        
+        return updatedItems;
+      });
 
       showToast('已成功贴上视频剪辑 (轻量化存储)', 'success');
 
@@ -545,8 +569,8 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
 
       await saveMedia(mediaRecord);
 
-      const cardWidth = Math.min(type === 'image' ? 260 : 280, canvasWidth - 32);
-      const cardHeight = type === 'image' ? 220 : 220;
+      const cardWidth = Math.min(type === 'image' ? 140 : 160, canvasWidth - 32);
+      const cardHeight = type === 'image' ? 140 : 130;
 
       const { x, y, rotation } = getNextSpawnCoordinates(cardWidth, cardHeight);
       const newZ = ++maxZIndexRef.current;
@@ -569,16 +593,20 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
       };
 
       await saveItem(newItem);
-      const updatedItems = [...items, newItem];
-      setItems(updatedItems);
-
-      const updatedNotebookUrl = {
-        ...notebook,
-        itemCount: updatedItems.length,
-        updatedAt: Date.now(),
-      };
-      await saveNotebook(updatedNotebookUrl);
-      onUpdateNotebook(updatedNotebookUrl);
+      setItems((prev) => {
+        const updatedItems = [...prev, newItem];
+        
+        const updatedNotebookUrl = {
+          ...notebook,
+          itemCount: updatedItems.length,
+          updatedAt: Date.now(),
+        };
+        saveNotebook(updatedNotebookUrl).then(() => {
+          onUpdateNotebook(updatedNotebookUrl);
+        });
+        
+        return updatedItems;
+      });
 
       showToast(`已成功贴上${type === 'image' ? '照片' : '视频'}原链接`, 'success');
 
@@ -623,16 +651,20 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
       };
 
       await saveItem(newItem);
-      const updatedItems = [...items, newItem];
-      setItems(updatedItems);
-
-      const updatedNotebookWeb = {
-        ...notebook,
-        itemCount: updatedItems.length,
-        updatedAt: Date.now(),
-      };
-      await saveNotebook(updatedNotebookWeb);
-      onUpdateNotebook(updatedNotebookWeb);
+      setItems((prev) => {
+        const updatedItems = [...prev, newItem];
+        
+        const updatedNotebookWeb = {
+          ...notebook,
+          itemCount: updatedItems.length,
+          updatedAt: Date.now(),
+        };
+        saveNotebook(updatedNotebookWeb).then(() => {
+          onUpdateNotebook(updatedNotebookWeb);
+        });
+        
+        return updatedItems;
+      });
 
       showToast('已成功贴上网页卡片 (点击即可在窗口中浏览与播放视频)', 'success');
 

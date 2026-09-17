@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import { Notebook } from '../types';
 import { formatDate, createSafeBlobUrl } from '../utils/media';
-import { getMedia } from '../db/indexedDB';
+import { getMedia } from '../db/store';
 
 interface NotebookCardProps {
   notebook: Notebook;

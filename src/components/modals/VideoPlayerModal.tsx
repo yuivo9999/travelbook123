@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { X, Loader2, AlertTriangle, FolderSearch, Link2, Film } from 'lucide-react';
 import Hls from 'hls.js';
-import { getMedia, updateMediaSource } from '../../db/indexedDB';
+import { getMedia, updateMediaSource } from '../../db/store';
 import { resolveOriginalMedia, registerSessionFile, pickFilesViaPicker } from '../../utils/media';
 
 interface VideoPlayerModalProps {
