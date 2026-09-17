@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <title>数字手账本</title>
+    <meta name="description" content="本地化数字事件手账本 Web App，一事一本，自由剪贴记录文字、照片与视频，本地 IndexedDB 离线存储" />
+    <meta property="og:title" content="数字手账本" />
+    <meta property="og:description" content="本地化数字事件手账本 Web App，一事一本，自由剪贴记录文字、照片与视频，本地 IndexedDB 离线存储" />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <!-- Tailwind CSS runtime CDN fallback for direct static viewing (e.g. toapp APK packaging without build step) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              paper: '#FAF7F2',
+            }
+          }
+        }
+      }
+    </script>
+    <script src="/vendor/pako_inflate.min.js"></script>
+</head>
+  <body class="bg-[#F3EFEA] text-[#2D2721] antialiased">
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+
