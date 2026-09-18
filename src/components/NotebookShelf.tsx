@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, BookOpen, Settings, Sparkles, X, Download } from 'lucide-react';
+import { Plus, BookOpen, Settings, Sparkles, X, Upload } from 'lucide-react';
 import { Notebook } from '../types';
 import { NotebookCard } from './NotebookCard';
 import { ConfirmDialog } from './modals/ConfirmDialog';
@@ -14,10 +14,11 @@ interface NotebookShelfProps {
   onDeleteNotebook: (id: string) => Promise<void>;
   onUpdateNotebook?: (updated: Notebook) => void;
   onOpenSettings: () => void;
+  onImportBackup?: () => void;
   showToast?: (text: string, type?: 'success' | 'error' | 'info') => void;
 }
 
-export const NotebookShelf: React.FC<NotebookShelfProps> = ({ notebooks, onCreateNotebook, onOpenNotebook, onDeleteNotebook, onUpdateNotebook, onOpenSettings, showToast = () => {} }) => {
+export const NotebookShelf: React.FC<NotebookShelfProps> = ({ notebooks, onCreateNotebook, onOpenNotebook, onDeleteNotebook, onUpdateNotebook, onOpenSettings, onImportBackup, showToast = () => {} }) => {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [newTitle, setNewTitle] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -50,6 +51,7 @@ export const NotebookShelf: React.FC<NotebookShelfProps> = ({ notebooks, onCreat
             <div><h1 className="text-lg font-bold tracking-tight">我的手账</h1><p className="text-[11px] opacity-75">一个事件 · 一本独立手账 · 本地私密保存</p></div>
           </div>
           <div className="flex items-center gap-2">
+            <button type="button" id="btn-home-import-backup" onClick={onImportBackup} className="w-9 h-9 rounded-xl bg-white/80 hover:bg-white border border-[#DDD4C7] text-[#4A3F35] flex items-center justify-center transition-all active:scale-95 shadow-2xs" title="导入存档" aria-label="导入存档"><Upload className="w-4 h-4 text-[#7D6F61]" /></button>
             <button type="button" id="btn-open-settings" onClick={onOpenSettings} className="w-9 h-9 rounded-xl bg-white/80 hover:bg-white border border-[#DDD4C7] text-[#4A3F35] flex items-center justify-center transition-all active:scale-95 shadow-2xs" title="应用设置与备份管理" aria-label="设置"><Settings className="w-4 h-4 text-[#7D6F61]" /></button>
             <button type="button" id="btn-open-create-notebook" onClick={() => setIsCreateModalOpen(true)} className="w-9 h-9 rounded-xl bg-[#4A3F35] hover:bg-[#382F26] text-[#FAF8F5] flex items-center justify-center transition-all active:scale-95 shadow-sm" title="新建手账" aria-label="新建手账"><Plus className="w-5 h-5 stroke-[2.5]" /></button>
           </div>
