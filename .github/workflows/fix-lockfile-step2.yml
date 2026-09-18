@@ -1,0 +1,43 @@
+name: Fix lockfile step 2
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  sync-lockfile:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Synchronize package-lock.json
+        run: npm install --package-lock-only --ignore-scripts
+
+      - name: Verify npm ci
+        run: npm ci --ignore-scripts
+
+      - name: Verify build
+        run: npm run build
+
+      - name: Commit verified lockfile
+        run: |
+          if git diff --quiet -- package-lock.json; then
+            echo "package-lock.json is already synchronized"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package-lock.json
+          git commit -m "fix: synchronize package lockfile"
+          git push origin main
