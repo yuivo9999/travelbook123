@@ -58,18 +58,23 @@ export const ImageItem: React.FC<ImageItemProps> = ({ item, canvasWidth, onDragS
     setHasError(true);
   };
 
-  // Images can visually shrink to 80px while retaining the existing persisted schema.
-  // The drag callback receives the effective visual width so an 80px image can still
-  // be dragged all the way to the notebook's right edge.
+  // Keep the legacy visual scaling behavior for older records while ensuring that
+  // once an image is resized to the new 80px minimum, its persisted/runtime width
+  // is also 80px. This lets NotebookView's existing right-edge clamp use the real
+  // visual width instead of the old 160px minimum.
   const rawWidth = Math.max(item.width || 240, 80);
   const effectiveWidth = Math.min(
-    rawWidth <= 240 ? 80 + (rawWidth - 160) * 2 : rawWidth,
+    rawWidth <= 240 ? Math.max(80, 80 + (rawWidth - 160) * 2) : rawWidth,
     Math.max(80, canvasWidth - 32)
   );
   const effectiveHeight = Math.max(item.height || 200, 80);
 
   const handleDrag = (e: React.PointerEvent) => {
-    onDragStart(e, { ...item, width: effectiveWidth });
+    // The drag boundary in NotebookView reads the item from its state array.
+    // Synchronize the effective visual width before starting a drag so a legacy
+    // record that visually renders at 80px is no longer clamped as a 160px item.
+    if (item.width !== effectiveWidth) item.width = effectiveWidth;
+    onDragStart(e, item);
   };
 
   return (
@@ -85,11 +90,11 @@ export const ImageItem: React.FC<ImageItemProps> = ({ item, canvasWidth, onDragS
           </div>
         </div>
 
-        <div className="relative w-full flex-1 min-h-[70px] bg-[#F5F2ED] rounded-lg overflow-hidden flex items-center justify-center group/img">
+        <div className="relative w-full flex-1 min-h-[70px] bg-[#F5F2ED] rounded-lg overflow-hidden flex items-center justify-center group/img" onClick={(e) => e.stopPropagation()}>
           {loading ? (
             <div className="flex flex-col items-center gap-1 text-[#A09386]"><ImageIcon className="w-6 h-6 animate-pulse" /><span className="text-[10px]">读取图片...</span></div>
           ) : thumbUrl && !hasError ? (
-            <img src={thumbUrl} alt="手账照片" loading="lazy" onError={handleImageError} className="w-full h-full object-cover select-none transition-transform duration-300 pointer-events-none" />
+            <img src={thumbUrl} alt="手账照片" loading="lazy" onError={handleImageError} className="w-full h-full object-cover select-none transition-transform duration-300 pointer-events-none" draggable={false} />
           ) : (
             <div className="flex flex-col items-center gap-1 text-[#9E9082] p-4 text-center"><ImageIcon className="w-6 h-6 opacity-60" /><span className="text-xs">暂无图片数据</span></div>
           )}
