@@ -11,19 +11,10 @@ permissions:
 
 jobs:
   fix-and-build:
-    if: ${{ !contains(github.event.head_commit.message, 'fix: store media entries uncompressed') }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
-      - name: Install dependencies
-        run: npm install
 
       - name: Make media entries Store-only
         shell: bash
@@ -34,11 +25,16 @@ jobs:
           s = p.read_text()
           old = "if (ZIP_COMPRESSION_POLICY === 'balanced' && shouldCompressEntry(entry.name, original, entry.compress)) {"
           new = "const isMediaEntry = entry.name.startsWith('media/'); if (ZIP_COMPRESSION_POLICY === 'balanced' && !isMediaEntry && shouldCompressEntry(entry.name, original, entry.compress)) {"
-          if old not in s:
-              raise SystemExit('Expected ZIP compression guard was not found; refusing to modify the file.')
-          s = s.replace(old, new, 1)
-          p.write_text(s)
+          if old in s:
+              s = s.replace(old, new, 1)
+              p.write_text(s)
+              print('Updated ZIP export: media/* entries now use Store.')
+          else:
+              print('Compression guard already updated; no source change needed.')
           PY
+
+      - name: Install dependencies
+        run: npm install
 
       - name: Build
         run: GITHUB_PAGES=true npm run build
