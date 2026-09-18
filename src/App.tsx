@@ -21,6 +21,7 @@ export default function App() {
   const [isHomeImportOpen, setIsHomeImportOpen] = useState(false);
   const [homeImportBackup, setHomeImportBackup] = useState<ScrapbookBackup | null>(null);
   const [isHomeParsing, setIsHomeParsing] = useState(false);
+  const [isImportingFromSettings, setIsImportingFromSettings] = useState(false);
   const homeImportInputRef = useRef<HTMLInputElement>(null);
 
   const showToast = useCallback((text: string, type: 'error' | 'success' | 'info' = 'info') => {
@@ -127,6 +128,12 @@ export default function App() {
     homeImportInputRef.current?.click();
   }, []);
 
+  const openSettingsImportPicker = useCallback(() => {
+    setIsImportingFromSettings(true);
+    if (homeImportInputRef.current) homeImportInputRef.current.value = '';
+    homeImportInputRef.current?.click();
+  }, []);
+
   const parseAndOpenImport = useCallback(async (file: File, fromSettings = false) => {
     try {
       setIsHomeParsing(true);
@@ -141,39 +148,39 @@ export default function App() {
       showToast(err instanceof Error ? `导入解析失败：${err.message}` : '导入解析失败，请确认 ZIP 文件格式', 'error');
     } finally {
       setIsHomeParsing(false);
+      setIsImportingFromSettings(false);
       if (homeImportInputRef.current) homeImportInputRef.current.value = '';
     }
   }, [showToast]);
 
   const handleHomeImportFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
+    const fromSettings = isImportingFromSettings;
     if (!file) {
+      setIsImportingFromSettings(false);
       showToast('没有选择备份文件', 'info');
       return;
     }
-    await parseAndOpenImport(file, false);
+    await parseAndOpenImport(file, fromSettings);
   };
 
-  // Route the settings ZIP picker through the same verified home-import pipeline.
-  // stopImmediatePropagation is important here: React's delegated change listener
-  // must not also invoke SettingsModal's legacy parser for the same file.
+  // The settings dialog historically owned a second ZIP input. Route its button
+  // directly to the same proven App-level picker instead of relying on change-event
+  // interception or maintaining a second parser/import pipeline.
   useEffect(() => {
-    const handleSettingsZipSelection = (event: Event) => {
-      const target = event.target as HTMLInputElement | null;
-      if (!target || target === homeImportInputRef.current || target.type !== 'file') return;
-      const accept = target.getAttribute('accept') || '';
-      if (!accept.includes('.zip')) return;
-      const file = target.files?.[0];
-      if (!file) return;
+    const handleSettingsImportButton = (event: MouseEvent) => {
+      const target = event.target as HTMLElement | null;
+      const button = target?.closest?.('#btn-settings-open-import') as HTMLButtonElement | null;
+      if (!button) return;
       event.preventDefault();
       event.stopPropagation();
       event.stopImmediatePropagation();
-      void parseAndOpenImport(file, true);
+      openSettingsImportPicker();
     };
 
-    document.addEventListener('change', handleSettingsZipSelection, true);
-    return () => document.removeEventListener('change', handleSettingsZipSelection, true);
-  }, [parseAndOpenImport]);
+    document.addEventListener('click', handleSettingsImportButton, true);
+    return () => document.removeEventListener('click', handleSettingsImportButton, true);
+  }, [openSettingsImportPicker]);
 
   const handleHomeImportSuccess = async () => {
     await refreshNotebooks();
