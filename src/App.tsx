@@ -154,8 +154,9 @@ export default function App() {
     await parseAndOpenImport(file, false);
   };
 
-  // The settings dialog historically had its own ZIP parser/input. Capture its ZIP
-  // file selection here and route it through the already verified home-import path.
+  // Route the settings ZIP picker through the same verified home-import pipeline.
+  // stopImmediatePropagation is important here: React's delegated change listener
+  // must not also invoke SettingsModal's legacy parser for the same file.
   useEffect(() => {
     const handleSettingsZipSelection = (event: Event) => {
       const target = event.target as HTMLInputElement | null;
@@ -164,8 +165,10 @@ export default function App() {
       if (!accept.includes('.zip')) return;
       const file = target.files?.[0];
       if (!file) return;
+      event.preventDefault();
       event.stopPropagation();
-      parseAndOpenImport(file, true);
+      event.stopImmediatePropagation();
+      void parseAndOpenImport(file, true);
     };
 
     document.addEventListener('change', handleSettingsZipSelection, true);
