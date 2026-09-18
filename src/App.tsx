@@ -8,7 +8,6 @@ import { SettingsModal } from './components/modals/SettingsModal';
 import { ImportModal } from './components/modals/ImportModal';
 import { loadSettings, saveSettings, BACKGROUND_SKINS } from './utils/settings';
 import { parseBackupFile, ScrapbookBackup } from './utils/exportImport';
-import { Upload } from 'lucide-react';
 
 export default function App() {
   const [notebooks, setNotebooks] = useState<Notebook[]>([]);
@@ -123,10 +122,28 @@ export default function App() {
     refreshNotebooks();
   };
 
-  const handleHomeImportClick = () => {
+  const openHomeImportPicker = useCallback(() => {
     if (homeImportInputRef.current) homeImportInputRef.current.value = '';
     homeImportInputRef.current?.click();
-  };
+  }, []);
+
+  const parseAndOpenImport = useCallback(async (file: File, fromSettings = false) => {
+    try {
+      setIsHomeParsing(true);
+      showToast(`正在读取备份：${file.name}`, 'info');
+      const parsed = await parseBackupFile(file);
+      setHomeImportBackup(parsed);
+      setIsHomeImportOpen(true);
+      if (fromSettings) setIsSettingsOpen(false);
+      showToast(`备份读取成功：${parsed.notebooks.length} 本手账，${parsed.items.length} 项内容`, 'success');
+    } catch (err) {
+      console.error('ZIP 导入解析失败', err);
+      showToast(err instanceof Error ? `导入解析失败：${err.message}` : '导入解析失败，请确认 ZIP 文件格式', 'error');
+    } finally {
+      setIsHomeParsing(false);
+      if (homeImportInputRef.current) homeImportInputRef.current.value = '';
+    }
+  }, [showToast]);
 
   const handleHomeImportFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -134,21 +151,26 @@ export default function App() {
       showToast('没有选择备份文件', 'info');
       return;
     }
-    try {
-      setIsHomeParsing(true);
-      showToast(`正在读取备份：${file.name}`, 'info');
-      const parsed = await parseBackupFile(file);
-      setHomeImportBackup(parsed);
-      setIsHomeImportOpen(true);
-      showToast(`备份读取成功：${parsed.notebooks.length} 本手账，${parsed.items.length} 项内容`, 'success');
-    } catch (err) {
-      console.error('主页导入解析失败', err);
-      showToast(err instanceof Error ? `导入解析失败：${err.message}` : '导入解析失败，请确认 ZIP 文件格式', 'error');
-    } finally {
-      setIsHomeParsing(false);
-      if (homeImportInputRef.current) homeImportInputRef.current.value = '';
-    }
+    await parseAndOpenImport(file, false);
   };
+
+  // The settings dialog historically had its own ZIP parser/input. Capture its ZIP
+  // file selection here and route it through the already verified home-import path.
+  useEffect(() => {
+    const handleSettingsZipSelection = (event: Event) => {
+      const target = event.target as HTMLInputElement | null;
+      if (!target || target === homeImportInputRef.current || target.type !== 'file') return;
+      const accept = target.getAttribute('accept') || '';
+      if (!accept.includes('.zip')) return;
+      const file = target.files?.[0];
+      if (!file) return;
+      event.stopPropagation();
+      parseAndOpenImport(file, true);
+    };
+
+    document.addEventListener('change', handleSettingsZipSelection, true);
+    return () => document.removeEventListener('change', handleSettingsZipSelection, true);
+  }, [parseAndOpenImport]);
 
   const handleHomeImportSuccess = async () => {
     await refreshNotebooks();
@@ -164,20 +186,6 @@ export default function App() {
     <div className={`min-h-screen ${currentSkinConfig.bgClass} ${currentSkinConfig.textClass} transition-colors duration-300 selection:bg-[#E5D7C3] selection:text-[#2D2721]`}>
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />
       <input ref={homeImportInputRef} type="file" accept=".zip,application/zip,application/x-zip-compressed" className="hidden" onChange={handleHomeImportFileChange} />
-
-      {!activeNotebook && (
-        <button
-          type="button"
-          id="btn-home-import-backup"
-          onClick={handleHomeImportClick}
-          disabled={isHomeParsing}
-          className="fixed top-3 right-[6.25rem] z-[2000] w-9 h-9 rounded-xl bg-white/90 hover:bg-white border border-[#DDD4C7] text-[#4A3F35] flex items-center justify-center transition-all active:scale-95 shadow-sm disabled:opacity-60"
-          title="导入存档"
-          aria-label="导入存档"
-        >
-          <Upload className="w-4 h-4 text-[#7D6F61]" />
-        </button>
-      )}
 
       <SettingsModal
         isOpen={isSettingsOpen}
@@ -214,6 +222,7 @@ export default function App() {
           onOpenNotebook={(id) => setActiveNotebookId(id)}
           onDeleteNotebook={handleDeleteNotebook}
           onOpenSettings={() => setIsSettingsOpen(true)}
+          onImportBackup={openHomeImportPicker}
           showToast={showToast}
         />
       )}
