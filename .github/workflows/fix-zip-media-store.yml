@@ -45,9 +45,9 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           if git diff --quiet; then
-            echo 'No source changes were necessary.'
+            echo 'No changes were necessary.'
             exit 0
           fi
-          git add src/utils/exportImport.ts
+          git add src/utils/exportImport.ts package-lock.json
           git commit -m 'fix: store media entries uncompressed'
           git push origin HEAD:main
