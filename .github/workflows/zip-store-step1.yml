@@ -1,0 +1,65 @@
+name: ZIP Store step 1
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'src/utils/exportImport.ts'
+      - '.github/workflows/zip-store-step1.yml'
+
+permissions:
+  contents: write
+
+env:
+  TARGET: src/utils/exportImport.ts
+
+jobs:
+  switch-export-policy:
+    if: ${{ !contains(github.event.head_commit.message || '', '[zip-store-step1]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Switch export policy to Store
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('src/utils/exportImport.ts')
+          s = p.read_text(encoding='utf-8')
+          old = "const ZIP_COMPRESSION_POLICY = 'balanced' as const;"
+          new = "const ZIP_COMPRESSION_POLICY = 'store' as const;"
+          if old not in s:
+              if new in s:
+                  print('ZIP export policy is already Store; no change needed.')
+              else:
+                  raise SystemExit('Expected balanced ZIP policy declaration was not found.')
+          else:
+              p.write_text(s.replace(old, new, 1), encoding='utf-8')
+              print('Changed ZIP export policy: balanced -> store')
+          PY
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Commit verified change
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- "$TARGET"; then
+            echo 'No source change to commit.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add "$TARGET"
+          git commit -m 'fix: switch ZIP export to Store step 1 [zip-store-step1]'
+          git push origin HEAD:main
