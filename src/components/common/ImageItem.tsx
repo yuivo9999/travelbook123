@@ -58,9 +58,13 @@ export const ImageItem: React.FC<ImageItemProps> = ({ item, canvasWidth, onDragS
     setHasError(true);
   };
 
-  // The parent resize handler still owns persistence; this component renders the
-  // smaller visual range while keeping the existing data format backward compatible.
-  const effectiveWidth = Math.min(Math.max(item.width || 240, 80), Math.max(80, canvasWidth - 32));
+  // The resize callback persists the legacy 160px minimum. Map that lower
+  // persisted range to a smaller visual range without changing the backup schema.
+  const rawWidth = Math.max(item.width || 240, 80);
+  const effectiveWidth = Math.min(
+    rawWidth <= 240 ? 80 + (rawWidth - 160) * 2 : rawWidth,
+    Math.max(80, canvasWidth - 32)
+  );
   const effectiveHeight = Math.max(item.height || 200, 80);
 
   return (
@@ -95,12 +99,8 @@ export const ImageItem: React.FC<ImageItemProps> = ({ item, canvasWidth, onDragS
           </div>
         )}
 
-        <div onPointerDown={(e) => onRotateStart(e, item)} className="absolute -bottom-2 -left-2 w-7 h-7 flex items-center justify-center cursor-grab active:cursor-grabbing touch-none z-30 select-none text-[#7D7062] hover:text-[#2D2721] active:scale-110 transition-transform" title="触摸或按住旋转照片 (左下角)">
-          <div className="w-5 h-5 rounded-bl-lg rounded-tr-sm bg-white border border-[#D9CEBF] shadow-xs flex items-center justify-center"><RotateCw className="w-2.5 h-2.5" /></div>
-        </div>
-        <div onPointerDown={(e) => onResizeStart(e, item)} className="absolute -bottom-2 -right-2 w-7 h-7 flex items-center justify-center cursor-nwse-resize touch-none z-30 select-none text-[#7D7062] hover:text-[#2D2721] active:scale-110 transition-transform" title="触摸或按住拖动以改变照片大小 (右下角)">
-          <div className="w-5 h-5 rounded-br-lg rounded-tl-sm bg-white border border-[#D9CEBF] shadow-xs flex items-center justify-center"><Maximize2 className="w-2.5 h-2.5 rotate-90" /></div>
-        </div>
+        <div onPointerDown={(e) => onRotateStart(e, item)} className="absolute -bottom-2 -left-2 w-7 h-7 flex items-center justify-center cursor-grab active:cursor-grabbing touch-none z-30 select-none text-[#7D7062] hover:text-[#2D2721] active:scale-110 transition-transform" title="触摸或按住旋转照片 (左下角)"><div className="w-5 h-5 rounded-bl-lg rounded-tr-sm bg-white border border-[#D9CEBF] shadow-xs flex items-center justify-center"><RotateCw className="w-2.5 h-2.5" /></div></div>
+        <div onPointerDown={(e) => onResizeStart(e, item)} className="absolute -bottom-2 -right-2 w-7 h-7 flex items-center justify-center cursor-nwse-resize touch-none z-30 select-none text-[#7D7062] hover:text-[#2D2721] active:scale-110 transition-transform" title="触摸或按住拖动以改变照片大小 (右下角)"><div className="w-5 h-5 rounded-br-lg rounded-tl-sm bg-white border border-[#D9CEBF] shadow-xs flex items-center justify-center"><Maximize2 className="w-2.5 h-2.5 rotate-90" /></div></div>
       </div>
     </div>
   );
