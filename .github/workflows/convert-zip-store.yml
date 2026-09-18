@@ -1,0 +1,45 @@
+name: Convert ZIP export to Store
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  convert:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Switch ZIP export to Store mode
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('src/utils/exportImport.ts')
+          s = p.read_text(encoding='utf-8')
+          old = "const ZIP_COMPRESSION_POLICY = 'balanced' as const;"
+          new = "const ZIP_COMPRESSION_POLICY = 'store' as const;"
+          if old not in s:
+              raise SystemExit('balanced ZIP policy declaration not found; refusing to modify the file')
+          p.write_text(s.replace(old, new, 1), encoding='utf-8')
+          PY
+
+      - name: Typecheck and build
+        run: |
+          npm ci
+          npm run build
+
+      - name: Commit Store-mode export change
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/utils/exportImport.ts
+          if git diff --cached --quiet; then
+            echo 'No change needed.'
+          else
+            git commit -m 'fix: use uncompressed ZIP store mode for faster exports'
+            git push
+          fi
