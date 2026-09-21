@@ -4,7 +4,6 @@ import { getAllNotebooks, saveNotebook, deleteNotebook, getNotebook } from './db
 import { NotebookShelf } from './components/NotebookShelf';
 import { NotebookView } from './components/NotebookView';
 import { ToastContainer, ToastMessage } from './components/common/Toast';
-import { NotificationSettings } from './components/common/NotificationSettings';
 import { SettingsModal } from './components/modals/SettingsModal';
 import { ImportModal } from './components/modals/ImportModal';
 import { loadSettings, saveSettings, BACKGROUND_SKINS } from './utils/settings';
@@ -28,11 +27,7 @@ export default function App() {
 
   const showToast = useCallback((text: string, type: 'error' | 'success' | 'info' = 'info') => {
     const id = 'toast_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6);
-    // Keep operation feedback in a single live notification slot. Batch actions
-    // (for example adding dozens of photos) can emit many messages in quick
-    // succession; replacing the previous message prevents the toast stack from
-    // covering the screen and lets the final operation result remain visible.
-    setToasts([{ id, text, type }]);
+    setToasts((prev) => [...prev, { id, text, type }]);
   }, []);
 
   const dismissToast = useCallback((id: string) => {
@@ -73,6 +68,8 @@ export default function App() {
     fetchActive();
   }, [activeNotebookId, showToast]);
 
+  // Give each open notebook one private browser-history entry. Android/iOS
+  // back-swipe then produces popstate inside the SPA instead of leaving it.
   useEffect(() => {
     if (!activeNotebookId) return;
 
@@ -152,6 +149,8 @@ export default function App() {
   };
 
   const handleBackToShelf = () => {
+    // Use the same history transition for the visible back button and the
+    // mobile edge-swipe, so both return exactly one level to the shelf.
     if (notebookHistoryEntryRef.current) {
       window.history.back();
       return;
@@ -202,6 +201,9 @@ export default function App() {
     await parseAndOpenImport(file, fromSettings);
   };
 
+  // The settings dialog historically owned a second ZIP input. Route its button
+  // directly to the same proven App-level picker instead of relying on change-event
+  // interception or maintaining a second parser/import pipeline.
   useEffect(() => {
     const handleSettingsImportButton = (event: MouseEvent) => {
       const target = event.target as HTMLElement | null;
@@ -222,14 +224,55 @@ export default function App() {
     setActiveNotebookId(null);
     setActiveNotebook(null);
     setDataVersion((v) => v + 1);
-    setIsHomeImportOpen(false);
-    setHomeImportBackup(null);
-    showToast('手账导入完成', 'success');
   };
 
+  const activeSkinId = activeNotebook?.backgroundSkin || settings.backgroundSkin;
+  const currentSkinConfig = BACKGROUND_SKINS.find((s) => s.id === activeSkinId) || BACKGROUND_SKINS[0];
+
   return (
-    <>
-      {/* existing application UI continues below */}
-    </>
+    <div className={`min-h-screen ${currentSkinConfig.bgClass} ${currentSkinConfig.textClass} transition-colors duration-300 selection:bg-[#E5D7C3] selection:text-[#2D2721]`}>
+      <ToastContainer toasts={toasts} onDismiss={dismissToast} />
+      <input ref={homeImportInputRef} type="file" accept=".zip,application/zip,application/x-zip-compressed" className="hidden" onChange={handleHomeImportFileChange} />
+
+      <SettingsModal
+        isOpen={isSettingsOpen}
+        settings={settings}
+        onUpdateSettings={handleUpdateSettings}
+        onClose={() => setIsSettingsOpen(false)}
+        onDataReset={() => { setActiveNotebookId(null); refreshNotebooks(); }}
+        onDataImported={() => { refreshNotebooks(); setDataVersion((v) => v + 1); }}
+        showToast={showToast}
+      />
+
+      <ImportModal
+        isOpen={isHomeImportOpen}
+        backup={homeImportBackup}
+        onClose={() => { if (!isHomeParsing) setIsHomeImportOpen(false); }}
+        onImportSuccess={handleHomeImportSuccess}
+        showToast={showToast}
+      />
+
+      {activeNotebook ? (
+        <NotebookView
+          key={`${activeNotebook.id}_v${dataVersion}`}
+          notebook={activeNotebook}
+          settings={settings}
+          onBack={handleBackToShelf}
+          onUpdateNotebook={handleUpdateNotebook}
+          onOpenSettings={() => setIsSettingsOpen(true)}
+          showToast={showToast}
+        />
+      ) : (
+        <NotebookShelf
+          notebooks={notebooks}
+          onCreateNotebook={handleCreateNotebook}
+          onOpenNotebook={(id) => setActiveNotebookId(id)}
+          onDeleteNotebook={handleDeleteNotebook}
+          onOpenSettings={() => setIsSettingsOpen(true)}
+          onImportBackup={openHomeImportPicker}
+          showToast={showToast}
+        />
+      )}
+    </div>
   );
 }
