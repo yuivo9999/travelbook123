@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { CheckCircle, AlertCircle, Info, X } from 'lucide-react';
+import { loadSettings } from '../../utils/settings';
 
 export interface ToastMessage {
   id: string;
@@ -14,24 +15,26 @@ interface ToastContainerProps {
 }
 
 export function ToastContainer({ toasts, onDismiss }: ToastContainerProps) {
+  const settings = loadSettings();
+  if (!settings.showActionNotifications) return null;
+
   return (
     <div className="fixed bottom-4 right-4 z-[20000] flex flex-col gap-2">
       <AnimatePresence>
         {toasts.map((toast) => (
-          <ToastItem key={toast.id} toast={toast} onDismiss={() => onDismiss(toast.id)} />
+          <ToastItem key={toast.id} toast={toast} duration={settings.notificationDuration} onDismiss={() => onDismiss(toast.id)} />
         ))}
       </AnimatePresence>
     </div>
   );
 }
 
-function ToastItem({ toast, onDismiss }: { toast: ToastMessage; onDismiss: () => void }) {
+function ToastItem({ toast, duration, onDismiss }: { toast: ToastMessage; duration: number; onDismiss: () => void }) {
   useEffect(() => {
-    const timer = setTimeout(() => {
-      onDismiss();
-    }, 5000);
+    if (duration <= 0) return;
+    const timer = setTimeout(onDismiss, duration);
     return () => clearTimeout(timer);
-  }, [onDismiss]);
+  }, [duration, onDismiss]);
 
   const Icon = toast.type === 'success' ? CheckCircle : toast.type === 'error' ? AlertCircle : Info;
   const bgColor = toast.type === 'success' ? 'bg-green-100' : toast.type === 'error' ? 'bg-red-100' : 'bg-blue-100';
@@ -46,7 +49,7 @@ function ToastItem({ toast, onDismiss }: { toast: ToastMessage; onDismiss: () =>
     >
       <Icon className="w-5 h-5" />
       <span className="text-sm font-medium">{toast.text}</span>
-      <button onClick={onDismiss} className="ml-2 hover:opacity-70 transition-opacity">
+      <button onClick={onDismiss} className="ml-2 hover:opacity-70 transition-opacity" aria-label="关闭通知">
         <X className="w-4 h-4" />
       </button>
     </motion.div>
