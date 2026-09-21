@@ -17,6 +17,7 @@ import {
   Volume2,
   VolumeX,
   Sliders,
+  Bell,
 } from 'lucide-react';
 import { AppSettings, BackgroundSkin, PaperStyle } from '../../types';
 import {
@@ -40,7 +41,7 @@ interface SettingsModalProps {
   showToast: (text: string, type?: 'success' | 'error' | 'info') => void;
 }
 
-type TabType = 'visual' | 'storage' | 'interaction';
+type TabType = 'visual' | 'storage' | 'interaction' | 'notifications';
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
   isOpen,
@@ -202,8 +203,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               <Palette className="w-3.5 h-3.5" />
             </div>
             <div>
-              <h3 className="font-serif font-bold text-sm sm:text-base text-[#382F26]">手账设置</h3>
-              <p className="text-[10px] text-[#8C7E70]">视觉定制 · 本地存储</p>
+              <h3 className="font-serif font-bold text-sm sm:text-base text-[#382F26]">全局设置</h3>
+              <p className="text-[10px] text-[#8C7E70]">应用偏好 · 本地存储</p>
             </div>
           </div>
 
@@ -256,6 +257,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           >
             <RotateCw className="w-4 h-4" />
             <span>旋转与音效</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('notifications')}
+            className={`flex items-center gap-2 px-4 py-4 sm:py-5 text-sm sm:text-base font-semibold border-b-2 transition-all whitespace-nowrap ${
+              activeTab === 'notifications'
+                ? 'border-[#4A3F35] text-[#382F26]'
+                : 'border-transparent text-[#8C7E70] hover:text-[#382F26]'
+            }`}
+          >
+            <Bell className="w-4 h-4" />
+            <span>消息通知</span>
           </button>
         </div>
 
@@ -624,6 +638,70 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   </button>
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* TAB: GLOBAL NOTIFICATIONS */}
+          {activeTab === 'notifications' && (
+            <div className="space-y-5">
+              <div className="p-4 rounded-2xl bg-[#F4EFEA] border border-[#E5DFD4] space-y-4">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex items-start gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-white border border-[#E0D7CC] flex items-center justify-center text-[#5A4D40] shrink-0">
+                      <Bell className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h4 className="font-serif font-bold text-sm text-[#382F26]">全局消息通知</h4>
+                      <p className="text-[11px] text-[#8C7E70] mt-0.5 leading-relaxed">
+                        这是应用级设置，对所有手账本统一生效。切换手账本不会改变此设置。
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => onUpdateSettings({ ...settings, showActionNotifications: !settings.showActionNotifications })}
+                    aria-label={settings.showActionNotifications ? '关闭操作消息' : '开启操作消息'}
+                    className={`w-12 h-6 rounded-full transition-colors relative flex items-center px-0.5 shrink-0 ${settings.showActionNotifications ? 'bg-[#4A3F35]' : 'bg-[#D9CFC1]'}`}
+                  >
+                    <div className={`w-5 h-5 rounded-full bg-white shadow-xs transform transition-transform ${settings.showActionNotifications ? 'translate-x-6' : 'translate-x-0'}`} />
+                  </button>
+                </div>
+
+                <div className="pt-3 border-t border-[#E5DDD0] space-y-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <div className="text-xs font-medium text-[#382F26]">消息显示时间</div>
+                      <div className="text-[11px] text-[#8C7E70] mt-0.5">普通操作消息自动消失时间；批量任务仍只显示一条通知。</div>
+                    </div>
+                    <span className="px-2.5 py-1 rounded-full text-xs font-mono font-bold bg-white border border-[#DDD3C4] text-[#4A3F35] shrink-0">
+                      {settings.notificationDuration === 0 ? '一直显示' : `${Math.round(settings.notificationDuration / 1000)} 秒`}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-5 gap-1.5">
+                    {[
+                      { label: '1秒', value: 1000 },
+                      { label: '2秒', value: 2000 },
+                      { label: '4秒', value: 4000 },
+                      { label: '6秒', value: 6000 },
+                      { label: '一直', value: 0 },
+                    ].map((option) => (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onClick={() => onUpdateSettings({ ...settings, notificationDuration: option.value })}
+                        className={`py-2 rounded-xl text-xs font-medium border transition-all ${settings.notificationDuration === option.value ? 'bg-[#4A3F35] text-white border-[#4A3F35] shadow-xs' : 'bg-white hover:bg-[#EFE8DE] text-[#6E6152] border-[#DDD5C7]'}`}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <p className="text-[11px] text-[#9E9082] leading-relaxed">
+                修改后立即生效，并保存在当前设备的应用设置中，不属于任何单一本手账，也不会随单本手账导入或导出。
+              </p>
             </div>
           )}
 
