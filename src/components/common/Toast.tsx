@@ -18,12 +18,24 @@ export function ToastContainer({ toasts, onDismiss }: ToastContainerProps) {
   const settings = loadSettings();
   if (!settings.showActionNotifications) return null;
 
+  // Operation feedback is intentionally a single-slot notification. Batch
+  // actions can generate dozens of messages (for example, adding 50 photos),
+  // so stacking every message would cover the screen and keep old messages
+  // alive long after they are useful. The newest result replaces the previous
+  // one while the normal user-configured lifetime still applies.
+  const latestToast = toasts.length > 0 ? toasts[toasts.length - 1] : null;
+
   return (
-    <div className="fixed bottom-4 right-4 z-[20000] flex flex-col gap-2">
-      <AnimatePresence>
-        {toasts.map((toast) => (
-          <ToastItem key={toast.id} toast={toast} duration={settings.notificationDuration} onDismiss={() => onDismiss(toast.id)} />
-        ))}
+    <div className="fixed bottom-4 right-4 z-[20000] w-[min(calc(100vw-2rem),360px)] pointer-events-none">
+      <AnimatePresence mode="wait">
+        {latestToast && (
+          <ToastItem
+            key={latestToast.id}
+            toast={latestToast}
+            duration={settings.notificationDuration}
+            onDismiss={() => onDismiss(latestToast.id)}
+          />
+        )}
       </AnimatePresence>
     </div>
   );
@@ -42,14 +54,16 @@ function ToastItem({ toast, duration, onDismiss }: { toast: ToastMessage; durati
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 50, scale: 0.3 }}
+      initial={{ opacity: 0, y: 20, scale: 0.98 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
-      exit={{ opacity: 0, scale: 0.5, transition: { duration: 0.2 } }}
-      className={`flex items-center gap-2 px-4 py-3 rounded-lg shadow-lg ${bgColor} ${textColor}`}
+      exit={{ opacity: 0, y: 10, scale: 0.98, transition: { duration: 0.16 } }}
+      role="status"
+      aria-live="polite"
+      className={`pointer-events-auto flex items-center gap-2 px-4 py-3 rounded-lg shadow-lg ${bgColor} ${textColor} max-w-full`}
     >
-      <Icon className="w-5 h-5" />
-      <span className="text-sm font-medium">{toast.text}</span>
-      <button onClick={onDismiss} className="ml-2 hover:opacity-70 transition-opacity" aria-label="关闭通知">
+      <Icon className="w-5 h-5 shrink-0" />
+      <span className="min-w-0 flex-1 text-sm font-medium break-words">{toast.text}</span>
+      <button onClick={onDismiss} className="ml-2 shrink-0 hover:opacity-70 transition-opacity" aria-label="关闭通知">
         <X className="w-4 h-4" />
       </button>
     </motion.div>
