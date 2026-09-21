@@ -1,0 +1,54 @@
+name: Patch Global Notification Settings
+
+on:
+  push:
+    branches: [main, master]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Patch SettingsModal
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('src/components/modals/SettingsModal.tsx')
+          s = p.read_text(encoding='utf-8')
+
+          if '全局消息通知' in s:
+              print('Global notification settings already present; nothing to do.')
+              raise SystemExit(0)
+
+          s = s.replace('  Sliders,\n} from \'lucide-react\';', '  Sliders,\n  Bell,\n} from \'lucide-react\';')
+          s = s.replace("type TabType = 'visual' | 'storage' | 'interaction';", "type TabType = 'visual' | 'storage' | 'interaction' | 'notifications';")
+          s = s.replace('            <span>旋转与音效</span>\n          </button>', '            <span>旋转与音效</span>\n          </button>\n\n          <button\n            type="button"\n            onClick={() => setActiveTab(\'notifications\')}\n            className={`flex items-center gap-2 px-4 py-4 sm:py-5 text-sm sm:text-base font-semibold border-b-2 transition-all whitespace-nowrap ${\n              activeTab === \'notifications\'\n                ? \'border-[#4A3F35] text-[#382F26]\'\n                : \'border-transparent text-[#8C7E70] hover:text-[#382F26]\'\n            }`}\n          >\n            <Bell className="w-4 h-4" />\n            <span>消息通知</span>\n          </button>')
+
+          marker = '          {/* TAB 2: STORAGE & DATA */}'
+          panel = '''          {/* TAB: GLOBAL NOTIFICATIONS */}\n          {activeTab === 'notifications' && (\n            <div className="space-y-5">\n              <div className="p-4 rounded-2xl bg-[#F4EFEA] border border-[#E5DFD4] space-y-4">\n                <div className="flex items-start justify-between gap-4">\n                  <div className="flex items-start gap-3">\n                    <div className="w-9 h-9 rounded-xl bg-white border border-[#E0D7CC] flex items-center justify-center text-[#5A4D40] shrink-0">\n                      <Bell className="w-4 h-4" />\n                    </div>\n                    <div>\n                      <h4 className="font-serif font-bold text-sm text-[#382F26]">全局消息通知</h4>\n                      <p className="text-[11px] text-[#8C7E70] mt-0.5 leading-relaxed">\n                        这是应用级设置，对所有手账本统一生效。切换手账本不会改变此设置。\n                      </p>\n                    </div>\n                  </div>\n                  <button\n                    type="button"\n                    onClick={() => onUpdateSettings({ ...settings, showActionNotifications: !settings.showActionNotifications })}\n                    aria-label={settings.showActionNotifications ? '关闭操作消息' : '开启操作消息'}\n                    className={`w-12 h-6 rounded-full transition-colors relative flex items-center px-0.5 shrink-0 ${settings.showActionNotifications ? 'bg-[#4A3F35]' : 'bg-[#D9CFC1]'}`}\n                  >\n                    <div className={`w-5 h-5 rounded-full bg-white shadow-xs transform transition-transform ${settings.showActionNotifications ? 'translate-x-6' : 'translate-x-0'}`} />\n                  </button>\n                </div>\n\n                <div className="pt-3 border-t border-[#E5DDD0] space-y-3">\n                  <div className="flex items-center justify-between gap-3">\n                    <div>\n                      <div className="text-xs font-medium text-[#382F26]">消息显示时间</div>\n                      <div className="text-[11px] text-[#8C7E70] mt-0.5">普通操作消息自动消失时间；批量任务仍只显示一条通知。</div>\n                    </div>\n                    <span className="px-2.5 py-1 rounded-full text-xs font-mono font-bold bg-white border border-[#DDD3C4] text-[#4A3F35] shrink-0">\n                      {settings.notificationDuration === 0 ? '一直显示' : `${Math.round(settings.notificationDuration / 1000)} 秒`}\n                    </span>\n                  </div>\n\n                  <div className="grid grid-cols-5 gap-1.5">\n                    {[\n                      { label: '1秒', value: 1000 },\n                      { label: '2秒', value: 2000 },\n                      { label: '4秒', value: 4000 },\n                      { label: '6秒', value: 6000 },\n                      { label: '一直', value: 0 },\n                    ].map((option) => (\n                      <button\n                        key={option.value}\n                        type="button"\n                        onClick={() => onUpdateSettings({ ...settings, notificationDuration: option.value })}\n                        className={`py-2 rounded-xl text-xs font-medium border transition-all ${settings.notificationDuration === option.value ? 'bg-[#4A3F35] text-white border-[#4A3F35] shadow-xs' : 'bg-white hover:bg-[#EFE8DE] text-[#6E6152] border-[#DDD5C7]'}`}\n                      >\n                        {option.label}\n                      </button>\n                    ))}\n                  </div>\n                </div>\n              </div>\n\n              <p className="text-[11px] text-[#9E9082] leading-relaxed">\n                修改后立即生效，并保存在当前设备的应用设置中，不属于任何单一本手账，也不会随单本手账导入或导出。\n              </p>\n            </div>\n          )}\n\n'''
+          if marker not in s:
+              raise SystemExit('Storage tab marker not found; aborting without changes.')
+          s = s.replace(marker, panel + marker, 1)
+          s = s.replace('<h3 className="font-serif font-bold text-sm sm:text-base text-[#382F26]">手账设置</h3>', '<h3 className="font-serif font-bold text-sm sm:text-base text-[#382F26]">全局设置</h3>')
+          s = s.replace('<p className="text-[10px] text-[#8C7E70]">视觉定制 · 本地存储</p>', '<p className="text-[10px] text-[#8C7E70]">应用偏好 · 本地存储</p>')
+          p.write_text(s, encoding='utf-8')
+          print('Patched SettingsModal with global notification settings.')
+          PY
+
+      - name: Commit patch
+        run: |
+          if git diff --quiet; then
+            echo "No changes to commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/components/modals/SettingsModal.tsx
+          git commit -m "feat: make notification preferences global"
+          git push
