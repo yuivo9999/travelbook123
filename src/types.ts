@@ -29,9 +29,13 @@ export interface AppSettings {
   snapToGrid: boolean;
   paperCornerStyle: 'rounded' | 'sharp' | 'stamp';
   showGridGuides: boolean;
-  rotationSensitivity: number; // 0.5 to 2.0 (default 1.0)
-  enableRotationSound: boolean; // default true
-  rotationSoundVolume: number; // 0 to 200 (default 100)
+  rotationSensitivity: number;
+  enableRotationSound: boolean;
+  rotationSoundVolume: number;
+  /** Whether operation toasts such as save/import/export messages are shown. */
+  showActionNotifications: boolean;
+  /** Toast lifetime in milliseconds; 0 means stay until manually dismissed. */
+  notificationDuration: number;
 }
 
 export interface TwineConnection {
@@ -42,7 +46,7 @@ export interface TwineConnection {
   x2: number;
   y2: number;
   color: string;
-  thickness: number; // 1.5, 2.5, 4
+  thickness: number;
 }
 
 export interface Notebook {
@@ -51,11 +55,11 @@ export interface Notebook {
   createdAt: number;
   updatedAt: number;
   itemCount?: number;
-  coverType?: CoverType; // 'none' | 'text' | 'image'
-  coverImageId?: string; // thumbnail media id if image chosen from media
-  coverImageData?: string; // base64 data for custom user uploaded cover image
-  coverText?: string; // custom subtitle/quote for text cover
-  coverColor?: string; // custom cover tint
+  coverType?: CoverType;
+  coverImageId?: string;
+  coverImageData?: string;
+  coverText?: string;
+  coverColor?: string;
   paperPattern?: PaperStyle;
   backgroundSkin?: BackgroundSkin;
   twines?: TwineConnection[];
@@ -90,18 +94,14 @@ export interface MediaRecord {
   notebookId: string;
   type: 'image' | 'video';
   mimeType: string;
-  /** Legacy inline blob only for migration/backward compatibility; new originals live in OPFS. */
   blob?: Blob;
-  /** Small preview only; original media is stored outside IndexedDB. */
   thumbnailBlob?: Blob;
-  /** OPFS relative storage key for the original media. */
   storageKey?: string;
   width?: number;
   height?: number;
-  duration?: number; // in seconds for video
+  duration?: number;
   fileName?: string;
-  sourceUrl?: string; // Original storage address or URL
-  /** @deprecated File handles are not part of the backup/storage mechanism. */
+  sourceUrl?: string;
   fileHandle?: any;
   fileSize?: number;
   createdAt: number;
