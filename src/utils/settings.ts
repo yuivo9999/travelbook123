@@ -11,6 +11,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   rotationSensitivity: 1.0,
   enableRotationSound: true,
   rotationSoundVolume: 100,
+  showActionNotifications: true,
+  notificationDuration: 2000,
 };
 
 export function loadSettings(): AppSettings {
