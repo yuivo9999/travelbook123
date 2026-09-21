@@ -1,53 +1,22 @@
-name: Fix ZIP media export strategy
+name: Validate ZIP64 media backup
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  fix-and-build:
+  validate:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Make media entries Store-only
-        shell: bash
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          p = Path('src/utils/exportImport.ts')
-          s = p.read_text()
-          old = "if (ZIP_COMPRESSION_POLICY === 'balanced' && shouldCompressEntry(entry.name, original, entry.compress)) {"
-          new = "const isMediaEntry = entry.name.startsWith('media/'); if (ZIP_COMPRESSION_POLICY === 'balanced' && !isMediaEntry && shouldCompressEntry(entry.name, original, entry.compress)) {"
-          if old in s:
-              s = s.replace(old, new, 1)
-              p.write_text(s)
-              print('Updated ZIP export: media/* entries now use Store.')
-          else:
-              print('Compression guard already updated; no source change needed.')
-          PY
-
       - name: Install dependencies
-        run: npm install
+        run: npm ci
 
       - name: Build
         run: GITHUB_PAGES=true npm run build
-
-      - name: Commit source fix
-        shell: bash
-        run: |
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          if git diff --quiet; then
-            echo 'No changes were necessary.'
-            exit 0
-          fi
-          git add src/utils/exportImport.ts package-lock.json
-          git commit -m 'fix: store media entries uncompressed'
-          git push origin HEAD:main
