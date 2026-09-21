@@ -4,6 +4,7 @@ import { getAllNotebooks, saveNotebook, deleteNotebook, getNotebook } from './db
 import { NotebookShelf } from './components/NotebookShelf';
 import { NotebookView } from './components/NotebookView';
 import { ToastContainer, ToastMessage } from './components/common/Toast';
+import { NotificationSettings } from './components/common/NotificationSettings';
 import { SettingsModal } from './components/modals/SettingsModal';
 import { ImportModal } from './components/modals/ImportModal';
 import { loadSettings, saveSettings, BACKGROUND_SKINS } from './utils/settings';
@@ -68,8 +69,6 @@ export default function App() {
     fetchActive();
   }, [activeNotebookId, showToast]);
 
-  // Give each open notebook one private browser-history entry. Android/iOS
-  // back-swipe then produces popstate inside the SPA instead of leaving it.
   useEffect(() => {
     if (!activeNotebookId) return;
 
@@ -149,8 +148,6 @@ export default function App() {
   };
 
   const handleBackToShelf = () => {
-    // Use the same history transition for the visible back button and the
-    // mobile edge-swipe, so both return exactly one level to the shelf.
     if (notebookHistoryEntryRef.current) {
       window.history.back();
       return;
@@ -201,9 +198,6 @@ export default function App() {
     await parseAndOpenImport(file, fromSettings);
   };
 
-  // The settings dialog historically owned a second ZIP input. Route its button
-  // directly to the same proven App-level picker instead of relying on change-event
-  // interception or maintaining a second parser/import pipeline.
   useEffect(() => {
     const handleSettingsImportButton = (event: MouseEvent) => {
       const target = event.target as HTMLElement | null;
@@ -243,6 +237,7 @@ export default function App() {
         onDataImported={() => { refreshNotebooks(); setDataVersion((v) => v + 1); }}
         showToast={showToast}
       />
+      {isSettingsOpen && <NotificationSettings settings={settings} onUpdate={handleUpdateSettings} />}
 
       <ImportModal
         isOpen={isHomeImportOpen}
