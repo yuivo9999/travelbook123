@@ -23,6 +23,7 @@ export default function App() {
   const [isHomeParsing, setIsHomeParsing] = useState(false);
   const [isImportingFromSettings, setIsImportingFromSettings] = useState(false);
   const homeImportInputRef = useRef<HTMLInputElement>(null);
+  const notebookHistoryEntryRef = useRef(false);
 
   const showToast = useCallback((text: string, type: 'error' | 'success' | 'info' = 'info') => {
     const id = 'toast_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6);
@@ -67,6 +68,32 @@ export default function App() {
     fetchActive();
   }, [activeNotebookId, showToast]);
 
+  // Give each open notebook one private browser-history entry. Android/iOS
+  // back-swipe then produces popstate inside the SPA instead of leaving it.
+  useEffect(() => {
+    if (!activeNotebookId) return;
+
+    const marker = `travelbook-notebook:${activeNotebookId}:${Date.now()}`;
+    const currentState = window.history.state;
+    const nextState = currentState && typeof currentState === 'object'
+      ? { ...currentState, __travelbookNotebook: marker }
+      : { __travelbookNotebook: marker };
+
+    window.history.pushState(nextState, '', window.location.href);
+    notebookHistoryEntryRef.current = true;
+
+    const handleNotebookPopState = () => {
+      if (!notebookHistoryEntryRef.current) return;
+      notebookHistoryEntryRef.current = false;
+      setActiveNotebookId(null);
+      setActiveNotebook(null);
+      void refreshNotebooks();
+    };
+
+    window.addEventListener('popstate', handleNotebookPopState);
+    return () => window.removeEventListener('popstate', handleNotebookPopState);
+  }, [activeNotebookId, refreshNotebooks]);
+
   const handleUpdateSettings = async (newSettings: AppSettings) => {
     setSettings(newSettings);
     saveSettings(newSettings);
@@ -104,7 +131,10 @@ export default function App() {
   const handleDeleteNotebook = async (id: string) => {
     try {
       await deleteNotebook(id);
-      if (activeNotebookId === id) setActiveNotebookId(null);
+      if (activeNotebookId === id) {
+        if (notebookHistoryEntryRef.current) window.history.back();
+        else setActiveNotebookId(null);
+      }
       await refreshNotebooks();
       showToast('已删除手账及其所有资料', 'success');
     } catch (err) {
@@ -119,8 +149,15 @@ export default function App() {
   };
 
   const handleBackToShelf = () => {
+    // Use the same history transition for the visible back button and the
+    // mobile edge-swipe, so both return exactly one level to the shelf.
+    if (notebookHistoryEntryRef.current) {
+      window.history.back();
+      return;
+    }
     setActiveNotebookId(null);
-    refreshNotebooks();
+    setActiveNotebook(null);
+    void refreshNotebooks();
   };
 
   const openHomeImportPicker = useCallback(() => {
